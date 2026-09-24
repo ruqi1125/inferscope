@@ -25,9 +25,12 @@ class RequestSummary:
     input_tokens: int | None
     output_tokens: int | None
     latency_sources: dict[str, str] = field(default_factory=dict)
+    ambiguous_event_types: tuple[str, ...] = ()
 
     def to_mapping(self) -> dict[str, object]:
-        return asdict(self)
+        result = asdict(self)
+        result["ambiguous_event_types"] = list(self.ambiguous_event_types)
+        return result
 
 
 def summarize_requests(events: list[Event]) -> list[RequestSummary]:
@@ -37,12 +40,22 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
     summaries: list[RequestSummary] = []
     for request_id, rows in grouped.items():
         rows.sort(key=lambda event: event.timestamp_ns)
-        first: dict[str, Event] = {}
+        grouped_events: dict[str, list[Event]] = defaultdict(list)
         for event in rows:
-            first.setdefault(event.event_type, event)
+            grouped_events[event.event_type].append(event)
+
+        tracked_events = {"REQUEST_ARRIVED", "REQUEST_SCHEDULED", "PREFIX_LOOKUP", "PREFILL_STARTED", "PREFILL_FINISHED", "REQUEST_FINISHED"}
+        ambiguous_event_types = tuple(sorted(
+            event_type for event_type, matching in grouped_events.items()
+            if event_type in tracked_events and len(matching) > 1
+        ))
+
+        def unique(event_name: str) -> Event | None:
+            matching = grouped_events.get(event_name, [])
+            return matching[0] if len(matching) == 1 else None
 
         def stamp(event_name: str) -> int | None:
-            event = first.get(event_name)
+            event = unique(event_name)
             return event.timestamp_ns if event else None
 
         arrived = stamp("REQUEST_ARRIVED")
@@ -50,7 +63,7 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
         prefill_start = stamp("PREFILL_STARTED")
         prefill_end = stamp("PREFILL_FINISHED")
         finished = stamp("REQUEST_FINISHED")
-        finished_event = first.get("REQUEST_FINISHED")
+        finished_event = unique("REQUEST_FINISHED")
 
         def measured_duration(name: str) -> int | None:
             if finished_event is None:
@@ -75,8 +88,8 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
         e2e_ns = measured_duration("e2e_ns")
         if e2e_ns is None:
             e2e_ns = finished - arrived if arrived is not None and finished is not None and finished >= arrived else None
-        lookup = first.get("PREFIX_LOOKUP")
-        arrived_event = first.get("REQUEST_ARRIVED")
+        lookup = unique("PREFIX_LOOKUP")
+        arrived_event = unique("REQUEST_ARRIVED")
         input_tokens = lookup.attributes.get("queried_tokens") if lookup else None
         if input_tokens is None and arrived_event is not None:
             input_tokens = arrived_event.attributes.get("input_tokens")
@@ -103,5 +116,6 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             latency_sources=latency_sources,
+            ambiguous_event_types=ambiguous_event_types,
         ))
     return sorted(summaries, key=lambda row: row.request_id)

@@ -1,8 +1,12 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from inferscope.adapters.sglang.adapter import SGLangAdapter
 from inferscope.adapters.vllm.adapter import VLLMAdapter
 from inferscope.analyzers.request import summarize_requests
+from inferscope.cli.main import _run, build_parser
+from inferscope.storage.jsonl import read_events
 
 
 def span(name, request_id, start, end, attributes=None, parent=""):
@@ -14,6 +18,23 @@ def span(name, request_id, start, end, attributes=None, parent=""):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_vllm_cli_preserves_decimal_duration_to_nearest_nanosecond(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "otel.json"
+            output = Path(directory) / "trace.jsonl"
+            source.write_text(
+                '{"spans":[{"name":"llm_request","startTimeUnixNano":"100",'
+                '"endTimeUnixNano":"200","attributes":{"gen_ai.request.id":"req-ns",'
+                '"gen_ai.latency.time_in_queue":0.0000000015}}]}',
+                encoding="utf-8",
+            )
+            args = build_parser().parse_args(["adapt", "vllm", str(source), "--output", str(output)])
+
+            _run(args)
+
+            request = summarize_requests(read_events(output))[0]
+            self.assertEqual(request.queue_ns, 2)
+
     def test_vllm_maps_measured_latency_attributes_to_lifecycle(self):
         document = {"resourceSpans": [{"scopeSpans": [{"spans": [span(
             "vllm.request", "req-1", 1_000_000_000, 1_100_000_000,
@@ -24,6 +45,8 @@ class AdapterTests(unittest.TestCase):
 
         self.assertEqual([event.event_type for event in events], ["REQUEST_ARRIVED", "REQUEST_QUEUED", "REQUEST_SCHEDULED", "PREFILL_STARTED", "PREFILL_FINISHED", "REQUEST_FINISHED"])
         self.assertEqual(events[-1].timestamp_ns, 1_100_000_000)
+        self.assertEqual(events[0].attributes["timestamp_source"], "OBSERVED")
+        self.assertEqual(events[-1].attributes["timestamp_source"], "OBSERVED")
 
     def test_vllm_request_span_with_parent_preserves_native_request_metrics(self):
         document = {"resourceSpans": [{"scopeSpans": [{"spans": [span(
@@ -61,6 +84,7 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(summary.ttft_ns, 55_000_000)
         self.assertEqual(summary.decode_ns, 30_000_000)
         self.assertEqual(summary.e2e_ns, 150_000_000)
+        self.assertEqual(set(summary.latency_sources.values()), {"OBSERVED"})
 
     def test_sglang_maps_known_stage_spans_and_ignores_unknown_stages(self):
         document = {"resourceSpans": [{"scopeSpans": [{"spans": [
@@ -75,6 +99,9 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("PREFILL_STARTED", [event.event_type for event in events])
         self.assertIn("PREFILL_FINISHED", [event.event_type for event in events])
         self.assertNotIn("new_unknown_stage", [event.event_type for event in events])
+        framework_span = next(event for event in events if event.event_type == "FRAMEWORK_SPAN")
+        self.assertEqual(framework_span.attributes["timestamp_source"], "OBSERVED")
+        self.assertEqual(framework_span.attributes["duration_source"], "DERIVED")
 
 
 if __name__ == "__main__":

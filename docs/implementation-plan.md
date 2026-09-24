@@ -52,7 +52,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 | 里程碑 | 当前状态 | 依据/说明 |
 |---|---|---|
 | M0 代码源与交付基线 | 已完成 | 本地、GitHub `main` 与服务器 `/home/nas511/zhangruqi/deeper` 的 `main` 均已同步且工作区干净。合并提交保留原本地与 GitHub 两侧历史，未强推；服务器通过 Git bundle 快进同步。同步前后离线测试均为 16 项通过。 |
-| M1 离线分析核心 | 进行中：输入契约与报告来源修补已完成 | 直接构造数据模型与缓存配置补齐校验；请求延迟新增 OBSERVED/DERIVED/UNKNOWN 来源，回放明确标注 SIMULATED；vLLM 重建时间点标记 DERIVED。回归覆盖非法输入、来源汇总、同时间请求稳定排序、缓存零容量/LRU、非法 KV 迁移与 JSONL 行号。剩余工作：重复阶段/请求事件的歧义处理、Workload 秒与内部纳秒契约核对、Radix 物理节点回收与容量口径核对。 |
+| M1 离线分析核心 | 收尾验证中 | 直接构造和 JSONL 输入共用校验；Workload 与 vLLM OTel 十进制时间按纳秒精度稳定换算；重复生命周期边界显式报告，歧义推导值保持 UNKNOWN；请求、Adapter、KV、Replay/Compare 报告标注实测/推导/模拟来源；Radix 淘汰会回收无效 trie 路径。Hash/Radix 容量与驱逐按前缀 block entry 计。本地全套测试 72 项及 3 个子用例通过，远端复验待提交同步。 |
 | M2 vLLM 真实 Trace 链路 | 未完成 | 现有 Adapter 离线读取导出的 OTel JSON，尚未完成运行中服务的端到端采集验收。 |
 | M3 真实 Cache/Scheduler 观测 | 未完成 | 缺少已接入并核验的逐请求事件来源。 |
 | M4 Aider + vLLM 验收 | 未开始 | 等待 M2 门槛；Aider 是验收对象，不是产品开发方向。 |
@@ -125,7 +125,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 ## 7. 技术与语义约束
 
 - Python 3.10+；运行时依赖优先标准库；pytest 用于测试；Serving Framework 依赖保持可选。
-- JSONL 是首期数据格式；内部事件时间使用整数纳秒；Workload 相对时间在入口处转换。
+- JSONL 是首期数据格式；内部事件时间使用整数纳秒；Workload 十进制秒值在回放排序时精确换算到最近纳秒，同值保持输入顺序。
 - Hash block 只复用完整对齐 block；Radix 与 Hash 的容量、entries 和 blocks 口径必须在报告中说明。
 - 非法输入不得静默丢弃；错误应定位到源文件和行号。
 - Cache miss、lost reuse 和利用率只有在数据与定义充分时才分类/计算；否则保留 `UNKNOWN`。

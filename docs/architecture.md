@@ -32,9 +32,9 @@ vLLM / SGLang ──► Framework Adapter ──► Event Stream
 
 ## 核心数据契约
 
-Workload 每行描述一个请求：`request_id`、以秒为单位的相对 `timestamp`、整数 `input_token_ids` 和非负 `output_tokens`。Trace 每行是一条有 `timestamp_ns`、`event_type`、`request_id` 和可扩展字段的事件。输入校验采用 fail-fast，并报告文件名和行号。事件时间统一使用整数纳秒；工作负载时间在入口处转换。
+Workload 每行描述一个请求：`request_id`、以秒为单位的相对 `timestamp`、整数 `input_token_ids` 和非负 `output_tokens`。Trace 每行是一条有 `timestamp_ns`、`event_type`、`request_id` 和可扩展字段的事件。输入校验采用 fail-fast，并报告文件名和行号。事件时间统一使用整数纳秒；Workload 在回放时按十进制值换算为最近整数纳秒，纳秒精度相同时保持输入顺序。vLLM OTel duration 同样按十进制原值精确换算为最近整数纳秒。
 
-分析区分观测值与模拟/推断值。Prefix miss 原因只能在证据充分时分类；无法从事件流确认的情况返回 `UNKNOWN`。容量未知时不报告虚构的利用率。指标输出需带上配置和来源，以便复现。
+分析区分输入实测值、边界推导值、离线模拟值和未知值。重复生命周期边界会显式列出，依赖歧义边界的推导延迟记为 `UNKNOWN`。Prefix miss 原因只能在证据充分时分类；容量未知时不报告利用率。Cache 容量和 eviction 以完整前缀 block entry 计；Radix 内部 token trie 节点数另行计数，淘汰 entry 时回收无用路径。指标输出带上配置和来源，以便复现。
 
 ## 模块边界
 

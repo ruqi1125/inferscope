@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from inferscope.core.events import Event
@@ -30,22 +31,21 @@ def _attributes(raw: Any) -> dict[str, Any]:
     return result
 
 
-def numeric(value: Any) -> float | None:
+def numeric(value: Any) -> Decimal | None:
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
+    if not isinstance(value, (int, float, Decimal, str)):
+        return None
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    return number if number.is_finite() else None
 
 
 def integer(value: Any) -> int | None:
     number = numeric(value)
-    if number is None or not number.is_integer():
+    if number is None or number != number.to_integral_value():
         return None
     return int(number)
 
@@ -88,4 +88,5 @@ class TraceAdapter(ABC):
 
 
 def span_event(timestamp_ns: int, event_type: str, request_id: str, attributes: dict[str, Any] | None = None) -> Event:
-    return Event(timestamp_ns, event_type, request_id, attributes or {})
+    metadata = {"timestamp_source": "OBSERVED", **(attributes or {})}
+    return Event(timestamp_ns, event_type, request_id, metadata)

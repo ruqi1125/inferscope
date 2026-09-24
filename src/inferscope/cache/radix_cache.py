@@ -27,6 +27,16 @@ class RadixPrefixCache:
     def cached_blocks(self) -> int:
         return len(self._lru)
 
+    @property
+    def stored_nodes(self) -> int:
+        count = 0
+        pending = list(self._root.children.values())
+        while pending:
+            node = pending.pop()
+            count += 1
+            pending.extend(node.children.values())
+        return count
+
     def _walk(self, tokens: tuple[int, ...], create: bool = False) -> _Node | None:
         node = self._root
         for token in tokens:
@@ -37,6 +47,21 @@ class RadixPrefixCache:
                 child = node.children[token] = _Node()
             node = child
         return node
+
+    def _prune(self, tokens: tuple[int, ...]) -> None:
+        node = self._root
+        path: list[tuple[_Node, int, _Node]] = []
+        for token in tokens:
+            child = node.children.get(token)
+            if child is None:
+                return
+            path.append((node, token, child))
+            node = child
+        node.terminal = False
+        for parent, token, child in reversed(path):
+            if child.terminal or child.children:
+                break
+            del parent.children[token]
 
     def lookup(self, tokens: tuple[int, ...]) -> CacheLookup:
         node = self._root
@@ -69,12 +94,13 @@ class RadixPrefixCache:
             self._lru[key] = node
             self._lru.move_to_end(key)
             while len(self._lru) > self.capacity_blocks:
-                old_prefix, old_node = self._lru.popitem(last=False)
-                old_node.terminal = False
-                removed = 1
+                old_prefix, _ = self._lru.popitem(last=False)
+                evicted = [old_prefix]
                 for descendant in tuple(self._lru):
                     if descendant[: len(old_prefix)] == old_prefix:
-                        self._lru.pop(descendant).terminal = False
-                        removed += 1
-                self.stats.evictions += removed
+                        self._lru.pop(descendant)
+                        evicted.append(descendant)
+                for prefix_key in sorted(evicted, key=len, reverse=True):
+                    self._prune(tuple(token for block in prefix_key for token in block))
+                self.stats.evictions += len(evicted)
             self.stats.peak_blocks = max(self.stats.peak_blocks, len(self._lru))

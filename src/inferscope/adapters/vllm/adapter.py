@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from fractions import Fraction
 from typing import Any
 
 from inferscope.adapters.base import TraceAdapter, integer, iter_spans, numeric, span_event
@@ -21,7 +22,7 @@ class VLLMAdapter(TraceAdapter):
             request_id, start, end, attrs, root = parsed
             request_span = attrs["name"] == "llm_request" or root
             if not request_span:
-                events.append(span_event(start, "FRAMEWORK_SPAN", request_id, {"framework": self.framework, "span_name": attrs["name"], "duration_ns": end - start}))
+                events.append(span_event(start, "FRAMEWORK_SPAN", request_id, {"framework": self.framework, "span_name": attrs["name"], "duration_ns": end - start, "duration_source": "DERIVED"}))
                 continue
 
             prompt_tokens = integer(attrs.get("gen_ai.usage.prompt_tokens"))
@@ -66,4 +67,4 @@ class VLLMAdapter(TraceAdapter):
         seconds = numeric(value)
         if seconds is None or seconds < 0:
             return None
-        return int(seconds * 1_000_000_000)
+        return round(Fraction(seconds) * 1_000_000_000)

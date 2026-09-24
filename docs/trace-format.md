@@ -8,7 +8,7 @@
 {"request_id":"req-001","timestamp":0.012,"input_token_ids":[1,2,3,4],"output_tokens":128}
 ```
 
-`timestamp` 是以秒为单位的相对到达时间，可为整数或有限非负小数；回放时排序依据为 timestamp，再以原始行序稳定打破平局。Token ID 是非负整数，`output_tokens` 是非负整数。
+`timestamp` 是以秒为单位的相对到达时间，可为整数或有限非负小数；回放时先按最近整数纳秒排序（十进制精确转换，正好半纳秒时取偶数），纳秒值相同时按输入行序稳定打破平局。Token ID 是非负整数，`output_tokens` 是非负整数。
 
 ## Trace
 
@@ -34,7 +34,13 @@ KV block 状态语义：`KV_ALLOCATE` 要有 `block_id` 和正整数 `token_coun
 
 vLLM Adapter 用时长重建的排队、调度和 Prefill 事件携带 `timestamp_source: "DERIVED"`。`trace` 保留这一属性，文本模式也显示时间来源；没有时间来源标记的输入显示 `UNKNOWN`。
 
+vLLM OTel JSON 中以秒表示的实测 duration 会按十进制原值精确换算为最近整数纳秒，正好半纳秒时取偶数；`adapt` 读取时保留 JSON 数字精度。duration 数值字段记录在 `REQUEST_FINISHED`，其来源为输入观测值（`OBSERVED`），由 span 起止时间相减得到的 `FRAMEWORK_SPAN.duration_ns` 标为 `DERIVED`。
+
 `replay`、`compare` 中每个策略报告及其 `workload_reuse` 新增 `analysis_mode: "SIMULATED"`，文本模式标为“离线模拟”。所谓 actual reuse 是当前模拟策略得到的复用量，不是线上测量值。
+
+同一请求出现多个 `REQUEST_ARRIVED`、`REQUEST_SCHEDULED`、`PREFIX_LOOKUP`、`PREFILL_STARTED`、`PREFILL_FINISHED` 或 `REQUEST_FINISHED` 边界时，`ambiguous_event_types` 会列出重复类型；依赖该边界的推导延迟显示为 `UNKNOWN`。输入提供的唯一 `REQUEST_FINISHED` 实测值仍可使用。
+
+KV 汇总的 `analysis_mode` 为 `DERIVED`，表示统计由输入 KV 事件重建；有容量配置时利用率来源也为 `DERIVED`，未配置时为 `UNKNOWN`。报告中的 `capacity_blocks`、`peak_blocks` 和 `evictions` 按完整前缀 block entry 计数。`RadixPrefixCache.stored_nodes` 属性指 token trie 的物理节点，淘汰时会裁掉不再被缓存 entry 使用的路径。
 
 Python 直接构造数据对象与 JSONL 输入执行相同的核心数据约束：纳秒时间必须是非负整数，拒绝布尔值；workload 秒数必须有限且非负；token ID 和输出 token 数必须为非负整数。缓存 block 大小必须为正整数，容量可为零；两者拒绝布尔和浮点值。事件扩展属性不得覆盖核心字段。
 

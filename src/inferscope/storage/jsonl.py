@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
@@ -28,7 +29,7 @@ def _read(path: str | Path, parser: Callable[[dict[str, Any], int], T]) -> list[
                 if not line.strip():
                     continue
                 try:
-                    value = json.loads(line)
+                    value = json.loads(line, parse_float=Decimal if parser is _parse_workload else float)
                     if not isinstance(value, dict):
                         raise ValueError("每行必须是 JSON object")
                     rows.append(parser(value, line_number))

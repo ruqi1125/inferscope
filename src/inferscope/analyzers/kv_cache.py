@@ -38,6 +38,8 @@ class KVCacheReport:
     capacity_blocks: int | None
     utilization: float | None
     timeline: tuple[KVTimelinePoint, ...]
+    analysis_mode: str
+    utilization_source: str
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -50,11 +52,13 @@ class KVCacheReport:
             "capacity_blocks": self.capacity_blocks,
             "utilization": self.utilization,
             "timeline": [asdict(point) for point in self.timeline],
+            "analysis_mode": self.analysis_mode,
+            "utilization_source": self.utilization_source,
         }
 
 
 def analyze_kv_events(events: list[Event], capacity_blocks: int | None = None) -> KVCacheReport:
-    if capacity_blocks is not None and capacity_blocks <= 0:
+    if capacity_blocks is not None and (isinstance(capacity_blocks, bool) or not isinstance(capacity_blocks, int) or capacity_blocks <= 0):
         raise ValueError("capacity_blocks 必须大于 0")
     blocks: dict[int, _BlockState] = {}
     allocated = reused = freed = evictions = peak = 0
@@ -100,4 +104,4 @@ def analyze_kv_events(events: list[Event], capacity_blocks: int | None = None) -
         timeline.append(KVTimelinePoint(event.timestamp_ns, event.event_type, block_id, event.request_id, len(blocks), sum(item.reference_count for item in blocks.values())))
     current = len(blocks)
     utilization = current / capacity_blocks if capacity_blocks is not None else None
-    return KVCacheReport(allocated, reused, freed, evictions, current, peak, capacity_blocks, utilization, tuple(timeline))
+    return KVCacheReport(allocated, reused, freed, evictions, current, peak, capacity_blocks, utilization, tuple(timeline), "DERIVED", "DERIVED" if capacity_blocks is not None else "UNKNOWN")

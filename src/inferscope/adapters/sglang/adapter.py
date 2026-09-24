@@ -50,5 +50,5 @@ class SGLangAdapter(TraceAdapter):
                 decode_steps[request_id] += 1
                 events.append(span_event(start, "DECODE_STEP", request_id, {"step": decode_steps[request_id], "source": self.framework}))
             else:
-                events.append(span_event(start, "FRAMEWORK_SPAN", request_id, {"framework": self.framework, "span_name": attrs["name"], "duration_ns": end - start}))
+                events.append(span_event(start, "FRAMEWORK_SPAN", request_id, {"framework": self.framework, "span_name": attrs["name"], "duration_ns": end - start, "duration_source": "DERIVED"}))
         return sorted(events, key=lambda event: event.timestamp_ns)

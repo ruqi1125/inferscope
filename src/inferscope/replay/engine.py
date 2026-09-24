@@ -40,7 +40,7 @@ class ReplayReport:
 
 
 def replay(requests: list[WorkloadRequest], cache: PrefixCache, cache_name: str) -> ReplayReport:
-    ordered = sorted(enumerate(requests), key=lambda pair: (pair[1].timestamp, pair[0]))
+    ordered = sorted(enumerate(requests), key=lambda pair: (pair[1].timestamp_ns, pair[0]))
     rows: list[RequestReplay] = []
     for _, request in ordered:
         lookup = cache.lookup(request.input_token_ids)

@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -109,6 +110,7 @@ def _format_summary(data: dict[str, Any], as_json: bool) -> None:
         print(f"KV 当前 blocks         {kv['current_blocks']}")
         print(f"KV 峰值 blocks         {kv['peak_blocks']}")
         print(f"KV evictions           {kv['evictions']}")
+        print("KV 统计来源            输入事件推导（DERIVED）")
         print(f"KV 利用率              {utilization}")
 
 
@@ -158,7 +160,7 @@ def _run(args: argparse.Namespace) -> int:
     if args.command == "adapt":
         source = Path(args.otel_json)
         try:
-            document = json.loads(source.read_text(encoding="utf-8"))
+            document = json.loads(source.read_text(encoding="utf-8"), parse_float=Decimal)
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"无法读取 OpenTelemetry JSON {source}: {exc}") from exc
         if not isinstance(document, dict):
