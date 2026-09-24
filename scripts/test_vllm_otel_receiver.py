@@ -8,14 +8,14 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Thread
+from threading import Event, Thread
 import unittest
 
 import grpc
 from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 from opentelemetry.proto.collector.trace.v1 import trace_service_pb2_grpc
 
-from vllm_otel_receiver import TraceReceiver, run_receiver
+from vllm_otel_receiver import TraceReceiver, _stop_server, run_receiver
 
 
 class ReceiverBatchTests(unittest.TestCase):
@@ -82,6 +82,78 @@ class ReceiverBatchTests(unittest.TestCase):
         ]
         self.assertEqual(spans, ["llm_request", "worker"])
 
+    def test_shutdown_waits_for_an_in_flight_export(self):
+        export_started = Event()
+        allow_export_to_finish = Event()
+
+        class DelayedTraceReceiver(TraceReceiver):
+            def Export(self, request, context):
+                export_started.set()
+                if not allow_export_to_finish.wait(timeout=3):
+                    context.abort(
+                        grpc.StatusCode.DEADLINE_EXCEEDED,
+                        "test export was not released",
+                    )
+                return super().Export(request, context)
+
+        receiver = DelayedTraceReceiver()
+        server_executor = ThreadPoolExecutor(max_workers=2)
+        server = grpc.server(server_executor)
+        trace_service_pb2_grpc.add_TraceServiceServicer_to_server(receiver, server)
+        port = server.add_insecure_port("127.0.0.1:0")
+        self.assertNotEqual(port, 0)
+        server.start()
+        client_executor = ThreadPoolExecutor(max_workers=1)
+        stop_thread = None
+        stop_started = Event()
+        stop_graces = []
+        original_stop = server.stop
+
+        def tracked_stop(grace):
+            stopped = original_stop(grace)
+            stop_graces.append(grace)
+            stop_started.set()
+            return stopped
+
+        server.stop = tracked_stop
+        try:
+            with grpc.insecure_channel(f"127.0.0.1:{port}") as channel:
+                grpc.channel_ready_future(channel).result(timeout=2)
+                stub = trace_service_pb2_grpc.TraceServiceStub(channel)
+                request = trace_service_pb2.ExportTraceServiceRequest()
+                request.resource_spans.add().scope_spans.add().spans.add().name = (
+                    "llm_request"
+                )
+                export_future = client_executor.submit(
+                    stub.Export, request, timeout=5
+                )
+                self.assertTrue(export_started.wait(timeout=2))
+
+                stop_thread = Thread(target=_stop_server, args=(server, server_executor))
+                stop_thread.start()
+                self.assertTrue(stop_started.wait(timeout=1))
+                allow_export_to_finish.set()
+                stop_thread.join(timeout=3)
+                self.assertFalse(stop_thread.is_alive())
+                self.assertEqual(stop_graces, [2.0])
+                export_future.result(timeout=2)
+        finally:
+            allow_export_to_finish.set()
+            server.stop = original_stop
+            server.stop(grace=2).wait()
+            server_executor.shutdown(wait=True, cancel_futures=True)
+            client_executor.shutdown(wait=True, cancel_futures=True)
+            if stop_thread is not None:
+                stop_thread.join(timeout=3)
+
+        spans = [
+            span
+            for resource in receiver.document()["resourceSpans"]
+            for scope in resource["scopeSpans"]
+            for span in scope["spans"]
+        ]
+        self.assertEqual([span["name"] for span in spans], ["llm_request"])
+
     def test_cli_writes_exported_document_after_sigterm(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "trace.json"
@@ -114,6 +186,7 @@ class ReceiverBatchTests(unittest.TestCase):
                 ready_line = lines.get(timeout=5)
                 match = re.search(r"127\.0\.0\.1:(\d+)", ready_line)
                 self.assertIsNotNone(match, ready_line)
+                self.assertFalse(output.exists())
                 port = int(match.group(1))
                 request = trace_service_pb2.ExportTraceServiceRequest()
                 span = request.resource_spans.add().scope_spans.add().spans.add()

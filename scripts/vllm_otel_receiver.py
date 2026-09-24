@@ -22,6 +22,7 @@ from opentelemetry.proto.collector.trace.v1 import (
 
 
 LOGGER = logging.getLogger("vllm_otel_receiver")
+STOP_GRACE_SECONDS = 2.0
 
 
 class TraceReceiver(trace_service_pb2_grpc.TraceServiceServicer):
@@ -54,6 +55,11 @@ def _span_count(document: dict[str, list[dict[str, object]]]) -> int:
     )
 
 
+def _stop_server(server, executor: ThreadPoolExecutor) -> None:
+    server.stop(grace=STOP_GRACE_SECONDS).wait()
+    executor.shutdown(wait=True, cancel_futures=True)
+
+
 def run_receiver(port: int, output: Path, timeout_seconds: float) -> int:
     if (
         not 0 <= port <= 65535
@@ -83,8 +89,7 @@ def run_receiver(port: int, output: Path, timeout_seconds: float) -> int:
         LOGGER.info("listening on 127.0.0.1:%d", bound_port)
         stop_requested.wait(timeout_seconds)
     finally:
-        server.stop(grace=0).wait()
-        executor.shutdown(wait=True, cancel_futures=True)
+        _stop_server(server, executor)
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
 
