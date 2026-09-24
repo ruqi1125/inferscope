@@ -1,61 +1,131 @@
-# InferScope 实施计划
+# InferScope 总体实施路线（唯一权威）
 
-## 目标
+> 规划基线：v1.0（2026-09-24）
+> 本文是 InferScope 产品范围、里程碑顺序和验收门槛的唯一权威来源。`README.md` 和 `architecture.md` 只作摘要或引用，不维护另一套路线。除非用户明确批准范围变更，或实测证据证明当前路线不可行，否则不得悄悄改变本文的产品目标、Agent 选择或阶段顺序。
 
-逐步交付一个完整的 LLM Serving Runtime Inspector，先形成可以单机复现的 trace 分析和 workload replay 闭环，再适配真实 Serving Framework。
+## 1. 产品目标
 
-## 技术选择
+InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于可追溯证据回答：**一次推理请求在 Serving Runtime 中经历了什么，为什么呈现出这样的延迟和缓存行为？**
 
-- Python 3.10+，运行时依赖优先标准库。
-- `pyproject.toml` 使用 setuptools 构建；CLI 入口 `inferscope`。
-- JSONL 为首期输入/输出格式，时间内部统一整数纳秒。
-- 单测使用 pytest；框架依赖作为可选 extra。
-- 所有 Git commit message 使用中文。
+长期分析对象固定为：
 
-## 阶段任务
+- Request 生命周期与请求关联；
+- Queue、Prefill、Decode、TTFT、E2E 等延迟；
+- Prefix Cache 命中与复用；
+- KV Cache 分配、复用、释放、驱逐和容量变化；
+- Scheduler 行为；
+- workload 回放与缓存策略比较。
 
-1. **包骨架与数据契约**：建立包元数据、CLI 入口、Event/Workload 类型、JSONL 解析与示例。
-2. **Trace 请求分析**：生命周期状态重建、summary/inspect/trace 命令、延迟阶段和缺失事件诊断。
-3. **KV Cache 分析**：状态机、容量约束、时间线和 block 指标。
-4. **Prefix Cache**：接口、HashBlockCache、RadixPrefixCache、LRU/容量/对齐语义及 miss 原因。
-5. **Replay/Compare**：确定性 workload replay、cache 统计汇总与策略对比报告。
-6. **Workload 复用分析**：潜在/实际复用口径和可证据支持的 lost reuse 分类。
-7. **vLLM Adapter**：按支持版本适配 trace/API，映射至统一事件流。
-8. **SGLang Adapter 与交付**：按可观测性实现适配器，补齐示例、基准和兼容性文档。
+项目最终通过真实 Serving Runtime 的可观测数据分析线上行为，同时保留一个边界清楚的离线模拟模式，用于理解 workload 与缓存策略。二者不得混为一谈。
 
-## 依赖关系
+## 2. 固定决策与边界
 
-阶段 1 是全部模块的前置。阶段 2、3、4 在事件契约稳定后可并行开发；阶段 5 依赖 workload 和 cache；阶段 6 依赖 replay 输出与可说明的口径；阶段 7、8 依赖稳定 Event Model。CLI 与文档在各阶段同步扩展。
+1. **Runtime Inspector 是产品主线。** InferScope 不构建 Agent，不定义 Agent 工作流，也不把 Agent 评测平台作为产品目标。
+2. **Aider 是真实验收对象。** 按此前决定使用现成 Aider，在项目达到验收门槛后执行固定编码任务；只做必要的模型端点配置，不自创工作流。
+3. **接入顺序固定为 vLLM → SGLang。** 先把 vLLM 的采集、映射和分析链路做实，再按相同数据契约接 SGLang。首批兼容性基线为 vLLM 0.29.0 与 SGLang 0.5.20；扩展版本须有对应样例和测试。
+4. **CLI 优先。** 输出人类可读摘要和机器可读 JSON；不建设复杂 Web 前端或监控大盘。
+5. **事实按来源分层。** 每项结果必须能够区分真实观测、离线模拟、推导值和未知值。缺少直接证据时使用 `UNKNOWN`，不得合成逐请求事实或因果结论。
+6. **Prometheus 不是产品主线或验收前置。** 如确有需要，可导入服务级聚合指标作背景信息；不得把聚合值归因到单个请求，也不替代 Prometheus/Grafana。
+7. **不实现 Serving Engine、GPU Profiler、自动优化、训练分析或复杂平台。** 不为接入框架而无审批地维护引擎分支或大范围修改其内部实现。
 
-## 本轮实现范围
+## 3. 当前基线
 
-建立可运行的离线分析闭环：严格读取 workload/trace JSONL，模拟 hash/radix prefix cache，生成 replay/workload 复用汇总，分析 KV block 生命周期，提供 summary/inspect/replay/compare/adapt CLI，并提供 vLLM/SGLang OpenTelemetry JSON adapter、demo 与架构/格式文档。更完整的 KV 线上观测、Prometheus 导入和 lost-reuse 因果拆分按阶段路线继续展开。
+截至本规划基线，当前实现已有：
 
-## 当前进度与后续里程碑
+- 统一事件与 JSONL 输入校验；
+- 请求/延迟摘要、单请求查看、事件 trace 和 CLI；
+- KV block 事件分析器；
+- HashBlock 与 Radix Prefix Cache 模拟、workload replay 和 compare；
+- vLLM 与 SGLang 的离线 OpenTelemetry JSON Adapter；
+- 当前可见工作副本中的 16 个自动化测试通过。
 
-- 阶段 1–5 已有可运行的离线基础：统一事件和 JSONL、请求/延迟与 KV 分析、Hash/Radix 缓存模拟、workload replay 和策略比较。它们目前不代表 Serving 运行时的真实缓存行为。
-- 阶段 6 只有潜在/模拟复用汇总；Lost reuse 暂归为 `UNKNOWN`，因果分类尚未完成。
-- 阶段 7–8 部分完成：vLLM/SGLang 的 OpenTelemetry JSON 可离线转换。vLLM 0.29 的 `llm_request` span 已映射到请求生命周期，并保留其实际队列、Prefill、Decode、TTFT、E2E 和 token 数。当前仍不负责启动/抓取线上服务，也没有导入 Prometheus 指标或逐请求 Scheduler/KV block 事件。
+这些完成项建立了可运行的离线基础，但不代表已采集真实 Runtime 的完整缓存或调度行为。当前仍未完成：
 
-后续按以下顺序交付：
+- 从运行中的 Serving 服务稳定采集并端到端校验 trace；
+- 接入可验证的逐请求 Scheduler、Prefix Cache 和 KV block 事件；
+- 基于真实事件完成 lost-reuse 的因果归因；
+- 运行 Aider 真实任务并核对 Agent 请求与原始 Runtime trace；
+- SGLang 的真实运行端到端验收。
 
-1. **真实运行时数据入口**：接入 vLLM trace 导出和 Prometheus `/metrics` 采集/导入；明确区分逐请求观测与服务级聚合指标，并标记采集配置和来源。
-2. **真实事件与解释能力**：根据 vLLM/SGLang 可用事件逐步补充 Prefix Cache、Scheduler 和 KV 生命周期数据；只有有直接证据时才给出 miss/lost-reuse 原因。
-3. **真实 Agent 验收**：前两步的输入、关联和报告稳定后，在隔离的临时仓库中运行现成 Aider 编程任务，经 vLLM 请求并采集 trace，检查 InferScope 的时延、请求关联和复用分析是否与原始数据一致；再扩展到 SGLang。
-4. **交付质量**：补齐版本兼容矩阵、可复现样例、基准结果和机器可读报告。
+开始后续代码工作前，先确定唯一工作副本并核对本地、远端与 GitHub 的提交关系。仓库同步问题属于交付前置，不得通过强制覆盖或重写未知提交历史来处理；项目提交信息继续使用中文。
 
-## 关键语义与风险
+| 里程碑 | 当前状态 | 依据/说明 |
+|---|---|---|
+| M0 代码源与交付基线 | 进行中 | 本地规范检出 `main` 比 `origin/main` 多 1 个提交；远端与 GitHub 的提交关系尚待安全核对。 |
+| M1 离线分析核心 | 基础已实现，正确性核对待完成 | 当前可见检出 16 个测试通过；真实 Runtime Cache/Scheduler 行为尚未由此证明。 |
+| M2 vLLM 真实 Trace 链路 | 未完成 | 现有 Adapter 离线读取导出的 OTel JSON，尚未完成运行中服务的端到端采集验收。 |
+| M3 真实 Cache/Scheduler 观测 | 未完成 | 缺少已接入并核验的逐请求事件来源。 |
+| M4 Aider + vLLM 验收 | 未开始 | 等待 M2 门槛；Aider 是验收对象，不是产品开发方向。 |
+| M5 SGLang 实测 | 未开始 | 目前只有离线 Adapter。 |
+| M6 发布质量 | 未开始 | 按前序里程碑产出更新。 |
 
-- Hash block 仅复用完整对齐 block；尾部 token 按未命中处理。
-- 容量单位固定为缓存 block 数；Radix 容量按唯一缓存 token 计数并向上换算为 block，报告 entries 与 blocks 时标清口径。
-- LRU 逐个 block/前缀单元淘汰；radix 子树只在无活动引用时可裁剪。
-- CLI 输入错误不静默丢行；错误包含源路径与行号。
-- 潜在复用及 miss 原因必须标注模拟/估算来源，不能伪装成线上观测。
+## 4. 唯一实施顺序
 
-## 首轮验收
+### M0：固定代码源与交付基线
 
-- `python -m inferscope --help` 列出命令。
-- `replay examples/demo.jsonl` 输出请求数、token 数、命中率、淘汰和峰值容量。
-- `compare` 对同一 workload 运行 hash 与 radix 并排输出。
-- `summary`/`inspect` 能解析示例 trace，并对缺失阶段显示 unknown。
-- 分析与缓存代码不导入 vLLM/SGLang。
+**工作：** 确认唯一权威 Git 工作副本；核对远端服务器、GitHub 与本地的分支/提交关系；记录当前测试结果和已实现能力。
+
+**通过条件：** 后续修改位置明确；提交历史已安全对齐或明确记录尚未解决的同步限制；没有用强制推送覆盖未知提交。
+
+### M1：稳固离线分析核心
+
+**工作：** 在现有实现上做有证据支持的正确性修补，不重写已可工作的模块。核对事件状态迁移、时间单位、缺失阶段处理、缓存容量/对齐口径、Replay 确定性及报告中的来源标记。
+
+**通过条件：** 示例和自动化测试可重复运行；`summary`、`inspect`、`trace`、`replay`、`compare` 的输出口径一致；模拟结果明确标记为模拟，不冒充 Runtime 观测。
+
+### M2：打通 vLLM 真实 Trace 链路
+
+**工作：** 先以 vLLM 0.29.0 为基线，从真实运行服务导出 OpenTelemetry trace，保存可复现的脱敏 fixture，经 Adapter 转为统一事件，再由 CLI 分析。允许用少量受控请求排查采集链路；这只是技术 smoke test，不是 Agent 效果评测。首个应用层端到端验收仍是 M4 的现成 Aider。
+
+**通过条件：** 原始 span 与转换事件中的 request id、时间戳、token 数和已提供延迟字段可逐项核对；请求数及统计可回溯到输入 trace；未提供的阶段保持未知。Prometheus 采集不是此里程碑的必要条件。
+
+### M3：补齐真实 Cache 与 Scheduler 观测
+
+**工作：** 基于目标 vLLM 版本实际提供的事件/接口，接入有证据支持的 Prefix Cache、KV 生命周期和 Scheduler 数据，并将其映射到统一事件模型。优先使用 Runtime 已提供的可观测数据；如原生数据不足，先报告具体缺口及影响，再提出最小、可隔离的可选采集方案。
+
+**通过条件：** 报告能区分逐请求事件、服务级聚合值、模拟值和未知值；Cache/Scheduler 分析均可追溯到原始事件。若必须大范围改 Runtime 内部实现才能取得数据，暂停该项并先取得用户对新方案的明确批准，不把不可观测字段写成已完成。
+
+### M4：Aider + vLLM 真实验收
+
+**启动门槛：** M2 通过；数据与 request id 关联稳定；原始 trace 和分析报告已核对；M3 中未支持的字段会如实显示 `UNKNOWN`；Agent 运行环境可隔离并清理。
+
+**工作：** 使用现成 Aider，在临时仓库执行固定编码任务，经 vLLM 服务调用模型。记录任务是否通过测试，以及实际产生的请求、token 和延迟；分析结论回查原始 trace。Aider 的任务流程保持框架原样，不为 InferScope 改造成自定义 Agent。
+
+**通过条件：** 实验可重复；任务结果、Agent 请求与 Runtime trace 能对应；报告只对有数据支持的延迟和缓存行为作结论。
+
+### M5：SGLang 适配与同类验收
+
+**工作：** 按稳定的统一事件模型实现/完善 SGLang Adapter；以真实 SGLang trace 做格式和指标核对；用与 M4 同类的 Aider 编码任务验证端到端流程，并记录与 vLLM 的可观测性差异。
+
+**通过条件：** 有明确的框架版本支持说明、可复现输入和自动化 Adapter 测试；共同字段语义一致，框架特有或缺失字段被显式标注。
+
+### M6：文档与发布质量
+
+**工作：** 整理安装与 CLI 使用说明、支持版本矩阵、脱敏 trace fixture、Aider 验收步骤、已知限制和机器可读报告示例。完善必要的基准脚本，但不扩建监控平台。
+
+**通过条件：** 新用户可按文档从样例运行离线分析，并可在支持的 Runtime 上复现实测流程；发布说明不夸大数据覆盖能力。
+
+## 5. Aider 验收前检查表
+
+- vLLM 真实 trace 已导出并能被当前 Adapter 解析；
+- request id、时间戳、token 统计及可用延迟与原始 trace 对得上；
+- 缺少 Scheduler/Prefix/KV 事件时显示为未知，不通过 Prometheus 聚合值推断单请求原因；
+- 任务仓库与运行目录隔离，实验结束可清理；
+- 固定任务、Serving 配置、模型配置和输入记录齐全，重复运行可以比较；
+- 报告同时保留任务验收结果与 Runtime 观测结果，不把两者混成单一分数。
+
+## 6. 变更控制：防止路线再次偏移
+
+- `docs/implementation-plan.md` 是唯一产品路线来源；进度更新只修改本文对应的状态和证据。
+- `docs/architecture.md` 只描述架构、数据契约和模块边界；`README.md` 只摘要目标、当前能力并链接到本文，不复制一套独立里程碑。
+- 新想法先归入既定目标或非目标。若会改变产品目标、Agent 框架、Runtime 接入顺序、验收门槛或阶段依赖，先写明证据、收益、代价和受影响里程碑，得到用户明确批准后再修改本路线。
+- 遇到技术阻碍时，报告已验证事实、影响范围和可选方案；暂停受影响的里程碑，不以静默换目标的方式继续。
+- 每个里程碑结束时更新“当前基线”或阶段状态，并附可复核的测试/实验依据。不得仅因实现了 Adapter 或 demo 就宣称真实 Runtime 观测已完成。
+
+## 7. 技术与语义约束
+
+- Python 3.10+；运行时依赖优先标准库；pytest 用于测试；Serving Framework 依赖保持可选。
+- JSONL 是首期数据格式；内部事件时间使用整数纳秒；Workload 相对时间在入口处转换。
+- Hash block 只复用完整对齐 block；Radix 与 Hash 的容量、entries 和 blocks 口径必须在报告中说明。
+- 非法输入不得静默丢弃；错误应定位到源文件和行号。
+- Cache miss、lost reuse 和利用率只有在数据与定义充分时才分类/计算；否则保留 `UNKNOWN`。

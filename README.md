@@ -34,7 +34,7 @@ inferscope summary trace.jsonl
 
 ## 路线与边界
 
-完整架构与所有实施阶段见 [架构路线](docs/architecture.md)，当前完成度和后续里程碑见 [实施计划](docs/implementation-plan.md)。Prometheus 实时/快照导入、逐请求 Scheduler/KV 事件和真实 Agent 端到端验收仍在后续路线中；未知事实保持 `UNKNOWN`，不做无依据归因。
+项目范围、当前进度、阶段顺序和验收门槛以[总体实施路线](docs/implementation-plan.md)为唯一权威；[架构文档](docs/architecture.md)只描述系统结构与数据契约。Aider 是后期真实验收对象，不是 InferScope 的产品目标；观测、模拟和未知数据严格区分，不做无依据归因。
 
 ## 开发
 

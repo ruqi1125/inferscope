@@ -1,4 +1,4 @@
-# InferScope 架构与整体路线
+# InferScope 架构
 
 ## 产品目标
 
@@ -49,39 +49,9 @@ core ◄── storage
 
 `core`、`cache`、`analyzers` 不依赖任何 Serving Framework；vLLM 和 SGLang 依赖只允许出现在各自 adapter 子包中，并作为可选依赖安装。
 
-## 整体实施路线
+## 路线文档
 
-### A. 契约与可执行骨架
-
-完成 Python 包、版本化 JSONL 格式、统一 Event、输入错误诊断、CLI 入口和示例数据。验收：示例可读取，非法记录能准确定位。
-
-### B. Trace 与请求分析
-
-根据事件重建请求生命周期，支持 `summary`、`inspect`、`trace`。统计 Queue、Prefill、Decode 和 TTFT；缺失阶段以 unknown 表示，不跨越未知区间猜测耗时。
-
-### C. KV Cache 生命周期分析
-
-建模 ALLOCATE、REUSE、FREE、EVICT，校验状态迁移，重建 block 时间线，统计请求分配/复用、驱逐、峰值占用和有容量依据的利用率。
-
-### D. Prefix Cache 模拟器
-
-建立统一接口，实现按 block 对齐和容量/淘汰规则明确的 HashBlockCache，以及最长前缀匹配、共享节点、引用管理和 LRU 的 RadixPrefixCache。记录 matched/recomputed tokens 和 miss 原因；证据不足时为 UNKNOWN。
-
-### E. Replay 与策略比较
-
-支持 workload JSONL 的确定性回放；比较相同输入、相同容量约束下的 hash/radix 策略，报告命中率、cached/computed tokens、evictions、peak entries，并记录策略配置。
-
-### F. Workload 复用归因
-
-估算 workload 潜在复用与模拟得到的实际复用，拆分 eviction、divergence、alignment、unknown。定义严格的分母和口径；无法因果归因的 lost reuse 留在 unknown。
-
-### G. Framework Adapter
-
-离线 OpenTelemetry JSON adapter 已实现 vLLM 和 SGLang 的请求/已知阶段映射。后续补齐版本兼容、Prometheus 聚合指标导入和更多低层事件来源。Adapter 负责版本适配与映射，不向分析器泄漏框架对象；无数据字段不得合成。
-
-### H. 报告与发布质量
-
-完善 CLI 表格、JSON 报告、文档、演示 workload、基准脚本和兼容性说明。保持 CLI 为主，不建设复杂 Web 平台。
+产品目标、当前完成度、固定范围、里程碑顺序、验收门槛和路线变更规则统一维护在 [`docs/implementation-plan.md`](implementation-plan.md)。本文只维护架构、数据契约与模块边界，不复制另一套阶段列表或路线状态。
 
 ## 非目标
 
