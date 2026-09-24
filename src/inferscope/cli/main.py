@@ -56,7 +56,7 @@ def _print_replay(report: ReplayReport, reuse: dict[str, object], as_json: bool,
 
 def _summary(events: list[Event], capacity_blocks: int | None = None) -> dict[str, Any]:
     rows = summarize_requests(events)
-    phase_names = ("queue_ns", "prefill_ns", "decode_ns", "ttft_ns")
+    phase_names = ("queue_ns", "prefill_ns", "decode_ns", "ttft_ns", "e2e_ns")
     totals = {
         phase: sum(getattr(row, phase) for row in rows if getattr(row, phase) is not None)
         for phase in phase_names
@@ -83,7 +83,13 @@ def _format_summary(data: dict[str, Any], as_json: bool) -> None:
         return
     print(f"请求数                 {data['requests']}")
     print(f"事件数                 {data['events']}")
-    labels = {"queue_ns": "Queue 总耗时", "prefill_ns": "Prefill 总耗时", "decode_ns": "Decode 总耗时", "ttft_ns": "TTFT 总耗时"}
+    labels = {
+        "queue_ns": "Queue 总耗时",
+        "prefill_ns": "Prefill 总耗时",
+        "decode_ns": "Decode 总耗时",
+        "ttft_ns": "TTFT 总耗时",
+        "e2e_ns": "E2E 总耗时",
+    }
     for phase, label in labels.items():
         count = data["known_phase_counts"][phase]
         total = data["total_latency_ns"][phase]

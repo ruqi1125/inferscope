@@ -31,6 +31,19 @@
 
 建立可运行的离线分析闭环：严格读取 workload/trace JSONL，模拟 hash/radix prefix cache，生成 replay/workload 复用汇总，分析 KV block 生命周期，提供 summary/inspect/replay/compare/adapt CLI，并提供 vLLM/SGLang OpenTelemetry JSON adapter、demo 与架构/格式文档。更完整的 KV 线上观测、Prometheus 导入和 lost-reuse 因果拆分按阶段路线继续展开。
 
+## 当前进度与后续里程碑
+
+- 阶段 1–5 已有可运行的离线基础：统一事件和 JSONL、请求/延迟与 KV 分析、Hash/Radix 缓存模拟、workload replay 和策略比较。它们目前不代表 Serving 运行时的真实缓存行为。
+- 阶段 6 只有潜在/模拟复用汇总；Lost reuse 暂归为 `UNKNOWN`，因果分类尚未完成。
+- 阶段 7–8 部分完成：vLLM/SGLang 的 OpenTelemetry JSON 可离线转换。vLLM 0.29 的 `llm_request` span 已映射到请求生命周期，并保留其实际队列、Prefill、Decode、TTFT、E2E 和 token 数。当前仍不负责启动/抓取线上服务，也没有导入 Prometheus 指标或逐请求 Scheduler/KV block 事件。
+
+后续按以下顺序交付：
+
+1. **真实运行时数据入口**：接入 vLLM trace 导出和 Prometheus `/metrics` 采集/导入；明确区分逐请求观测与服务级聚合指标，并标记采集配置和来源。
+2. **真实事件与解释能力**：根据 vLLM/SGLang 可用事件逐步补充 Prefix Cache、Scheduler 和 KV 生命周期数据；只有有直接证据时才给出 miss/lost-reuse 原因。
+3. **真实 Agent 验收**：前两步的输入、关联和报告稳定后，在隔离的临时仓库中运行现成 Aider 编程任务，经 vLLM 请求并采集 trace，检查 InferScope 的时延、请求关联和复用分析是否与原始数据一致；再扩展到 SGLang。
+4. **交付质量**：补齐版本兼容矩阵、可复现样例、基准结果和机器可读报告。
+
 ## 关键语义与风险
 
 - Hash block 仅复用完整对齐 block；尾部 token 按未命中处理。

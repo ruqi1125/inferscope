@@ -6,11 +6,11 @@ InferScope 是一个轻量级的 LLM Serving Runtime 分析工具，用来理解
 
 ## 当前能力
 
-- `summary`：汇总 trace 请求和延迟阶段。
+- `summary`：汇总 trace 请求和延迟阶段；对 vLLM 0.29 优先使用 span 中的实测 Queue、Prefill、Decode、TTFT 和 E2E 时长。
 - `inspect`：查看单个请求的生命周期和缓存信息。
 - `replay`：模拟 workload 的 prefix cache 复用。
 - `compare`：对相同 workload 比较 hash-block 与 radix cache。
-- `adapt`：把 vLLM/SGLang 的 OpenTelemetry JSON 导出转换为统一 trace JSONL。
+- `adapt`：把 vLLM/SGLang 的 OpenTelemetry JSON 导出转换为统一 trace JSONL；当前读取已导出的文件，不连接运行中的服务。
 - JSONL 输入校验，错误定位到文件和行号。
 
 ## 安装
@@ -34,7 +34,7 @@ inferscope summary trace.jsonl
 
 ## 路线与边界
 
-完整架构与所有实施阶段见 [架构路线](docs/architecture.md)，本轮范围和关键语义见 [实施计划](docs/implementation-plan.md)。线上 adapter 只做可观测数据映射；未知事实保持 unknown，不做无依据归因。
+完整架构与所有实施阶段见 [架构路线](docs/architecture.md)，当前完成度和后续里程碑见 [实施计划](docs/implementation-plan.md)。Prometheus 实时/快照导入、逐请求 Scheduler/KV 事件和真实 Agent 端到端验收仍在后续路线中；未知事实保持 `UNKNOWN`，不做无依据归因。
 
 ## 开发
 

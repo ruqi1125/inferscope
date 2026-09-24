@@ -14,7 +14,7 @@ inferscope summary trace.jsonl
 
 ## vLLM
 
-vLLM 可通过 `--otlp-traces-endpoint` 导出 OpenTelemetry spans；部分细粒度模型阶段需要 `--collect-detailed-traces`，这会引入额外开销。Adapter 使用根 request span 的起止时间，以及有明确记录时的 `gen_ai.latency.time_in_queue`、`gen_ai.latency.time_in_model_prefill`、`gen_ai.usage.prompt_tokens` 和 `gen_ai.usage.completion_tokens`。其它子 span 以 `FRAMEWORK_SPAN` 事件保留名称和时长，不推断其业务含义。
+vLLM 可通过 `--otlp-traces-endpoint` 导出 OpenTelemetry spans；部分细粒度模型阶段需要 `--collect-detailed-traces`，这会引入额外开销。vLLM 0.29 的请求 span 名为 `llm_request`，即使它带有父 span，也按请求 span 处理。Adapter 使用其起止时间，并将 `gen_ai.latency.time_in_queue`、`gen_ai.latency.time_to_first_token`、`gen_ai.latency.time_in_model_prefill`、`gen_ai.latency.time_in_model_decode` 和 `gen_ai.latency.e2e` 归一化为纳秒后写入 `REQUEST_FINISHED`。请求摘要优先采用这些实测时长；没有实测字段时才从阶段事件边界计算。Prompt/completion token 数分别映射到请求到达/完成事件。其它非请求 span 以 `FRAMEWORK_SPAN` 保留名称和时长，不推断其业务含义。
 
 ## SGLang
 
