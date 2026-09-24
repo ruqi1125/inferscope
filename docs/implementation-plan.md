@@ -51,7 +51,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 
 | 里程碑 | 当前状态 | 依据/说明 |
 |---|---|---|
-| M0 代码源与交付基线 | 进行中 | 本地规范检出 `main` 比 `origin/main` 多 1 个提交；远端与 GitHub 的提交关系尚待安全核对。 |
+| M0 代码源与交付基线 | 进行中 | 本地规范检出与远端/GitHub 的提交关系尚未安全核对；本次文档提交尚未同步到远端。 |
 | M1 离线分析核心 | 基础已实现，正确性核对待完成 | 当前可见检出 16 个测试通过；真实 Runtime Cache/Scheduler 行为尚未由此证明。 |
 | M2 vLLM 真实 Trace 链路 | 未完成 | 现有 Adapter 离线读取导出的 OTel JSON，尚未完成运行中服务的端到端采集验收。 |
 | M3 真实 Cache/Scheduler 观测 | 未完成 | 缺少已接入并核验的逐请求事件来源。 |
