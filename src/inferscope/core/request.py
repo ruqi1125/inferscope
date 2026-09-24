@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from fractions import Fraction
 from math import isfinite
 from typing import Any
+
+from inferscope.core.time import seconds_to_nanoseconds
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,13 +39,13 @@ class WorkloadRequest:
 
     @property
     def timestamp_ns(self) -> int:
-        timestamp = self.timestamp if isinstance(self.timestamp, Decimal) else Decimal(str(self.timestamp))
-        nanos = Fraction(timestamp) * 1_000_000_000
-        quotient, remainder = divmod(nanos.numerator, nanos.denominator)
-        doubled_remainder = remainder * 2
-        if doubled_remainder > nanos.denominator or (doubled_remainder == nanos.denominator and quotient % 2):
-            quotient += 1
-        return quotient
+        if isinstance(self.timestamp, Decimal):
+            timestamp = self.timestamp
+        elif isinstance(self.timestamp, int):
+            timestamp = Decimal(self.timestamp)
+        else:
+            timestamp = Decimal(str(self.timestamp))
+        return seconds_to_nanoseconds(timestamp, "timestamp")
 
     @classmethod
     def from_mapping(cls, row: dict[str, Any], source_line: int = 0) -> WorkloadRequest:

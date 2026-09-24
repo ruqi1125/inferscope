@@ -37,6 +37,11 @@ class ReplayTests(unittest.TestCase):
         request = WorkloadRequest("r", Decimal("12345678901234567890.0000000015"), (), 0)
         self.assertEqual(request.timestamp_ns, 12_345_678_901_234_567_890_000_000_002)
 
+    def test_rejects_timestamp_too_large_for_bounded_nanosecond_conversion(self):
+        request = WorkloadRequest("r", Decimal("1e5000"), (), 0)
+        with self.assertRaisesRegex(ValueError, "timestamp 超出支持范围"):
+            _ = request.timestamp_ns
+
     def test_replays_by_timestamp_and_counts_only_input_tokens(self):
         requests = [
             WorkloadRequest("later", 2.0, (1, 2, 3, 4), 100),

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from fractions import Fraction
 from typing import Any
 
 from inferscope.adapters.base import TraceAdapter, integer, iter_spans, numeric, span_event
 from inferscope.core.events import Event
+from inferscope.core.time import seconds_to_nanoseconds
 
 
 class VLLMAdapter(TraceAdapter):
@@ -67,4 +67,4 @@ class VLLMAdapter(TraceAdapter):
         seconds = numeric(value)
         if seconds is None or seconds < 0:
             return None
-        return round(Fraction(seconds) * 1_000_000_000)
+        return seconds_to_nanoseconds(seconds, "duration")

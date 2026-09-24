@@ -18,6 +18,10 @@ def span(name, request_id, start, end, attributes=None, parent=""):
 
 
 class AdapterTests(unittest.TestCase):
+    def test_vllm_rejects_duration_too_large_for_bounded_nanosecond_conversion(self):
+        with self.assertRaisesRegex(ValueError, "duration 超出支持范围"):
+            VLLMAdapter._duration("1e5000")
+
     def test_vllm_cli_preserves_decimal_duration_to_nearest_nanosecond(self):
         with TemporaryDirectory() as directory:
             source = Path(directory) / "otel.json"
