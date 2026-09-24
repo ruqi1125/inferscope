@@ -34,13 +34,15 @@ class PrefixCache(Protocol):
     def cached_blocks(self) -> int: ...
 
 
-def classify_miss(queried: int, matched: int, block_size: int, cached_blocks: int) -> str:
+def classify_miss(queried: int, matched: int, block_size: int, cached_blocks: int, capacity_blocks: int) -> str:
     if matched == queried:
         return "NONE"
     if cached_blocks == 0:
         return "COLD_MISS"
     if queried % block_size and matched == queried - queried % block_size:
         return "BLOCK_ALIGNMENT"
+    if cached_blocks == capacity_blocks and matched == capacity_blocks * block_size:
+        return "CAPACITY_PRESSURE"
     if matched:
         return "PREFIX_DIVERGENCE"
     return "UNKNOWN"

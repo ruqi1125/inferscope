@@ -18,6 +18,8 @@
 
 v1 事件类型包括：`REQUEST_ARRIVED`、`REQUEST_QUEUED`、`REQUEST_SCHEDULED`、`PREFIX_LOOKUP`、`KV_ALLOCATE`、`KV_REUSE`、`KV_FREE`、`KV_EVICT`、`PREFILL_STARTED`、`PREFILL_FINISHED`、`DECODE_STEP`、`REQUEST_FINISHED`。字段按事件扩展；不适用的字段省略。
 
+KV block 状态语义：`KV_ALLOCATE` 要有 `block_id` 和正整数 `token_count`，并把一个引用关联到事件的 request；`KV_REUSE` 为该 request 增加引用；`KV_FREE` 只释放该 request 的引用，零引用 block 可留在缓存；`KV_EVICT` 仅允许淘汰零引用 block。非法迁移会报错。`FRAMEWORK_SPAN` 可保留 Adapter 尚未语义映射的 span 名称和时长。
+
 ## 版本
 
 Trace 文件可在每条记录中用可选 `schema_version` 指定格式版本；省略时视为 v1。未知主版本拒绝处理。后续需要兼容旧版时提供显式迁移，不静默改变字段意义。

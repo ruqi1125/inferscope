@@ -6,15 +6,19 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
+from inferscope.analyzers.kv_cache import analyze_kv_events
 from inferscope.analyzers.request import summarize_requests
+from inferscope.analyzers.workload import analyze_workload
+from inferscope.adapters.sglang.adapter import SGLangAdapter
+from inferscope.adapters.vllm.adapter import VLLMAdapter
 from inferscope.cache.hash_cache import HashBlockCache
 from inferscope.cache.radix_cache import RadixPrefixCache
 from inferscope.core.events import Event
 from inferscope.replay.engine import ReplayReport, replay
-from inferscope.storage.jsonl import read_events, read_workload
+from inferscope.storage.jsonl import read_events, read_workload, write_events
 
 
 def _cache(name: str, block_size: int, capacity: int):
@@ -26,8 +30,9 @@ def _print_json(value: Any) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2))
 
 
-def _print_replay(report: ReplayReport, as_json: bool, include_requests: bool = False) -> None:
+def _print_replay(report: ReplayReport, reuse: dict[str, object], as_json: bool, include_requests: bool = False) -> None:
     data = report.to_mapping()
+    data["workload_reuse"] = reuse
     if not include_requests:
         data.pop("request_results")
     if as_json:
@@ -41,13 +46,15 @@ def _print_replay(report: ReplayReport, as_json: bool, include_requests: bool = 
     print(f"命中率                 {report.hit_ratio:.1%}")
     print(f"Evictions              {report.evictions}")
     print(f"Peak blocks            {report.peak_blocks}/{report.capacity_blocks}")
+    print(f"潜在复用 tokens        {reuse['potential_reuse_tokens']}")
+    print(f"Lost reuse             {reuse['lost_reuse_tokens']}（原因未知部分保留为 UNKNOWN）")
     if include_requests:
         print("\n逐请求结果")
         for row in report.request_results:
             print(f"{row.request_id:<24} 命中 {row.matched_tokens:>6} / {row.input_tokens:<6}  miss={row.miss_reason}")
 
 
-def _summary(events: list[Event]) -> dict[str, Any]:
+def _summary(events: list[Event], capacity_blocks: int | None = None) -> dict[str, Any]:
     rows = summarize_requests(events)
     phase_names = ("queue_ns", "prefill_ns", "decode_ns", "ttft_ns")
     totals = {
@@ -58,12 +65,15 @@ def _summary(events: list[Event]) -> dict[str, Any]:
         phase: sum(getattr(row, phase) is not None for row in rows)
         for phase in phase_names
     }
+    kv_events = [event for event in events if event.event_type.startswith("KV_")]
+    kv_cache = analyze_kv_events(kv_events, capacity_blocks).to_mapping() if kv_events else None
     return {
         "requests": len(rows),
         "events": len(events),
         "known_phase_counts": known_counts,
         "total_latency_ns": totals,
         "requests_detail": [row.to_mapping() for row in rows],
+        "kv_cache": kv_cache,
     }
 
 
@@ -79,6 +89,13 @@ def _format_summary(data: dict[str, Any], as_json: bool) -> None:
         total = data["total_latency_ns"][phase]
         shown = f"{total / 1_000_000:.3f} ms ({count} 个已知)" if count else "UNKNOWN"
         print(f"{label:<22}{shown}")
+    if data["kv_cache"] is not None:
+        kv = data["kv_cache"]
+        utilization = f"{kv['utilization']:.1%}" if kv["utilization"] is not None else "UNKNOWN（未提供容量）"
+        print(f"KV 当前 blocks         {kv['current_blocks']}")
+        print(f"KV 峰值 blocks         {kv['peak_blocks']}")
+        print(f"KV evictions           {kv['evictions']}")
+        print(f"KV 利用率              {utilization}")
 
 
 def _add_common_cache_args(parser: argparse.ArgumentParser) -> None:
@@ -103,6 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     summary_parser = commands.add_parser("summary", help="汇总 trace")
     summary_parser.add_argument("trace")
+    summary_parser.add_argument("--capacity-blocks", type=int, help="KV cache 总容量，用于计算利用率")
     summary_parser.add_argument("--json", action="store_true")
 
     inspect_parser = commands.add_parser("inspect", help="查看单个请求")
@@ -114,35 +132,62 @@ def build_parser() -> argparse.ArgumentParser:
     trace_parser.add_argument("trace")
     trace_parser.add_argument("request_id", nargs="?")
     trace_parser.add_argument("--json", action="store_true")
+
+    adapt_parser = commands.add_parser("adapt", help="将 vLLM/SGLang OpenTelemetry JSON 转为 InferScope trace JSONL")
+    adapt_parser.add_argument("framework", choices=("vllm", "sglang"))
+    adapt_parser.add_argument("otel_json")
+    adapt_parser.add_argument("--output", "-o", required=True, help="输出 trace JSONL 路径")
     return parser
 
 
 def _run(args: argparse.Namespace) -> int:
+    if args.command == "adapt":
+        source = Path(args.otel_json)
+        try:
+            document = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"无法读取 OpenTelemetry JSON {source}: {exc}") from exc
+        if not isinstance(document, dict):
+            raise ValueError("OpenTelemetry JSON 顶层必须是 object")
+        adapter = VLLMAdapter() if args.framework == "vllm" else SGLangAdapter()
+        events = adapter.to_events(document)
+        write_events(args.output, events)
+        print(f"已转换 {len(events)} 个事件到 {args.output}")
+        return 0
     if args.command == "replay":
         requests = read_workload(args.workload)
         cache = _cache(args.cache, args.block_size, args.capacity_blocks)
         report = replay(requests, cache, args.cache)
-        _print_replay(report, args.json, args.details)
+        reuse = analyze_workload(requests, report, args.block_size).to_mapping()
+        _print_replay(report, reuse, args.json, args.details)
         return 0
     if args.command == "compare":
         requests = read_workload(args.workload)
         reports = {}
         for name in ("hash", "radix"):
-            reports[name] = replay(requests, _cache(name, args.block_size, args.capacity_blocks), name).to_mapping()
+            report = replay(requests, _cache(name, args.block_size, args.capacity_blocks), name)
+            reports[name] = report.to_mapping()
             reports[name].pop("request_results")
+            reports[name]["workload_reuse"] = analyze_workload(requests, report, args.block_size).to_mapping()
         if args.json:
             _print_json(reports)
         else:
             print(f"{'指标':<24}{'Hash':>14}{'Radix':>14}")
-            for key, label in (("hit_ratio", "命中率"), ("cached_tokens", "命中 tokens"), ("computed_tokens", "重算 tokens"), ("evictions", "淘汰 blocks"), ("peak_blocks", "峰值 blocks")):
+            for key, label in (("hit_ratio", "实际命中率"), ("cached_tokens", "命中 tokens"), ("computed_tokens", "重算 tokens"), ("evictions", "淘汰 blocks"), ("peak_blocks", "峰值 blocks")):
                 left, right = reports["hash"][key], reports["radix"][key]
                 if key == "hit_ratio":
+                    left, right = f"{left:.1%}", f"{right:.1%}"
+                print(f"{label:<24}{str(left):>14}{str(right):>14}")
+            for key, label in (("potential_hit_ratio", "潜在命中率"), ("lost_reuse_tokens", "Lost reuse tokens")):
+                left = reports["hash"]["workload_reuse"][key]
+                right = reports["radix"]["workload_reuse"][key]
+                if key == "potential_hit_ratio":
                     left, right = f"{left:.1%}", f"{right:.1%}"
                 print(f"{label:<24}{str(left):>14}{str(right):>14}")
         return 0
     events = read_events(args.trace)
     if args.command == "summary":
-        _format_summary(_summary(events), args.json)
+        _format_summary(_summary(events, args.capacity_blocks), args.json)
         return 0
     if args.command == "inspect":
         request_events = [event for event in events if event.request_id == args.request_id]

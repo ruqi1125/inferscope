@@ -77,7 +77,7 @@ core ◄── storage
 
 ### G. Framework Adapter
 
-先实现 vLLM adapter，再根据可观测事件覆盖 SGLang。Adapter 负责版本适配与映射，不向分析器泄漏框架对象。无数据字段不得合成。
+离线 OpenTelemetry JSON adapter 已实现 vLLM 和 SGLang 的请求/已知阶段映射。后续补齐版本兼容、Prometheus 聚合指标导入和更多低层事件来源。Adapter 负责版本适配与映射，不向分析器泄漏框架对象；无数据字段不得合成。
 
 ### H. 报告与发布质量
 

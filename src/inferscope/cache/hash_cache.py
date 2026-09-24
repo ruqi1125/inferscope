@@ -31,11 +31,12 @@ class HashBlockCache:
                 break
             self._blocks.move_to_end(key)
             matched += self.block_size
-        return CacheLookup(len(tokens), matched, classify_miss(len(tokens), matched, self.block_size, self.cached_blocks))
+        return CacheLookup(len(tokens), matched, classify_miss(len(tokens), matched, self.block_size, self.cached_blocks, self.capacity_blocks))
 
     def insert(self, tokens: tuple[int, ...]) -> None:
         prefix: list[tuple[int, ...]] = []
-        for offset in range(0, len(tokens) - self.block_size + 1, self.block_size):
+        limit = min(len(tokens) // self.block_size, self.capacity_blocks)
+        for offset in range(0, limit * self.block_size, self.block_size):
             block = tokens[offset : offset + self.block_size]
             prefix.append(block)
             key = tuple(prefix)

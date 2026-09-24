@@ -54,3 +54,11 @@ def read_workload(path: str | Path) -> list[WorkloadRequest]:
 
 def read_events(path: str | Path) -> list[Event]:
     return _read(path, _parse_event)
+
+
+def write_events(path: str | Path, events: list[Event]) -> None:
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("w", encoding="utf-8", newline="\n") as stream:
+        for event in events:
+            stream.write(json.dumps(event.to_mapping(), ensure_ascii=False) + "\n")

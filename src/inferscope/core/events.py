@@ -27,8 +27,13 @@ class Event:
         missing = required - row.keys()
         if missing:
             raise ValueError(f"缺少必填字段: {', '.join(sorted(missing))}")
+        version = row.get("schema_version", 1)
+        if isinstance(version, bool) or not isinstance(version, int) or version != 1:
+            raise ValueError(f"不支持的 schema_version: {version}")
         if isinstance(row["timestamp_ns"], bool) or not isinstance(row["timestamp_ns"], int):
             raise ValueError("timestamp_ns 必须是整数")
+        if not isinstance(row["event_type"], str) or not isinstance(row["request_id"], str):
+            raise ValueError("event_type 和 request_id 必须是字符串")
         core = required | {"schema_version"}
         return cls(
             timestamp_ns=row["timestamp_ns"],

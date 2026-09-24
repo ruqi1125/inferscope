@@ -29,7 +29,7 @@
 
 ## 本轮实现范围
 
-建立能运行的项目骨架和核心离线闭环：严格读取 workload/trace JSONL，模拟 hash/radix prefix cache，生成 replay 汇总，提供 summary/inspect/replay/compare CLI，并提供 demo 与架构/格式文档。真实框架 adapter、完整 KV 时间线和 lost-reuse 因果归因按阶段路线继续展开。
+建立可运行的离线分析闭环：严格读取 workload/trace JSONL，模拟 hash/radix prefix cache，生成 replay/workload 复用汇总，分析 KV block 生命周期，提供 summary/inspect/replay/compare/adapt CLI，并提供 vLLM/SGLang OpenTelemetry JSON adapter、demo 与架构/格式文档。更完整的 KV 线上观测、Prometheus 导入和 lost-reuse 因果拆分按阶段路线继续展开。
 
 ## 关键语义与风险
 
