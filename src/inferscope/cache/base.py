@@ -34,6 +34,13 @@ class PrefixCache(Protocol):
     def cached_blocks(self) -> int: ...
 
 
+def validate_cache_config(block_size: int, capacity_blocks: int) -> None:
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size <= 0:
+        raise ValueError("block_size 必须是正整数")
+    if isinstance(capacity_blocks, bool) or not isinstance(capacity_blocks, int) or capacity_blocks < 0:
+        raise ValueError("capacity_blocks 必须是非负整数")
+
+
 def classify_miss(queried: int, matched: int, block_size: int, cached_blocks: int, capacity_blocks: int) -> str:
     if matched == queried:
         return "NONE"

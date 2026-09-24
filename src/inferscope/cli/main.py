@@ -38,6 +38,7 @@ def _print_replay(report: ReplayReport, reuse: dict[str, object], as_json: bool,
     if as_json:
         _print_json(data)
         return
+    print("分析模式               离线模拟（SIMULATED）")
     print(f"缓存策略               {report.cache}")
     print(f"请求数                 {report.requests}")
     print(f"输入 tokens            {report.input_tokens}")
@@ -71,6 +72,11 @@ def _summary(events: list[Event], capacity_blocks: int | None = None) -> dict[st
         "requests": len(rows),
         "events": len(events),
         "known_phase_counts": known_counts,
+        "latency_source_counts": {
+            phase: {source: sum(row.latency_sources[phase] == source for row in rows)
+                    for source in ("OBSERVED", "DERIVED", "UNKNOWN")}
+            for phase in phase_names
+        },
         "total_latency_ns": totals,
         "requests_detail": [row.to_mapping() for row in rows],
         "kv_cache": kv_cache,
@@ -95,6 +101,8 @@ def _format_summary(data: dict[str, Any], as_json: bool) -> None:
         total = data["total_latency_ns"][phase]
         shown = f"{total / 1_000_000:.3f} ms ({count} 个已知)" if count else "UNKNOWN"
         print(f"{label:<22}{shown}")
+        sources = data["latency_source_counts"][phase]
+        print(f"  来源：输入实测 {sources['OBSERVED']}，边界推导 {sources['DERIVED']}，未知 {sources['UNKNOWN']}")
     if data["kv_cache"] is not None:
         kv = data["kv_cache"]
         utilization = f"{kv['utilization']:.1%}" if kv["utilization"] is not None else "UNKNOWN（未提供容量）"
@@ -178,6 +186,7 @@ def _run(args: argparse.Namespace) -> int:
         if args.json:
             _print_json(reports)
         else:
+            print("分析模式：离线模拟（SIMULATED）")
             print(f"{'指标':<24}{'Hash':>14}{'Radix':>14}")
             for key, label in (("hit_ratio", "实际命中率"), ("cached_tokens", "命中 tokens"), ("computed_tokens", "重算 tokens"), ("evictions", "淘汰 blocks"), ("peak_blocks", "峰值 blocks")):
                 left, right = reports["hash"][key], reports["radix"][key]
@@ -220,7 +229,8 @@ def _run(args: argparse.Namespace) -> int:
         for request_id, rows in result.items():
             print(request_id)
             for event in rows:
-                print(f"  {event['timestamp_ns']:>16}  {event['event_type']}")
+                timestamp_source = event.get("timestamp_source", "UNKNOWN")
+                print(f"  {event['timestamp_ns']:>16}  {event['event_type']}  时间来源={timestamp_source}")
     return 0
 
 

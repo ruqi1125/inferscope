@@ -31,6 +31,7 @@ class ReplayReport:
     capacity_blocks: int
     block_size: int
     request_results: tuple[RequestReplay, ...]
+    analysis_mode: str = "SIMULATED"
 
     def to_mapping(self) -> dict[str, object]:
         result = asdict(self)

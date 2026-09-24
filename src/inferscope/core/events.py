@@ -14,12 +14,18 @@ class Event:
     attributes: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if isinstance(self.timestamp_ns, bool) or not isinstance(self.timestamp_ns, int):
+            raise ValueError("timestamp_ns 必须是整数")
         if self.timestamp_ns < 0:
             raise ValueError("timestamp_ns 不能为负数")
-        if not self.event_type:
+        if not isinstance(self.event_type, str) or not self.event_type.strip():
             raise ValueError("event_type 不能为空")
-        if not self.request_id:
+        if not isinstance(self.request_id, str) or not self.request_id.strip():
             raise ValueError("request_id 不能为空")
+        if not isinstance(self.attributes, dict):
+            raise ValueError("attributes 必须是字典")
+        if self.attributes.keys() & {"schema_version", "timestamp_ns", "event_type", "request_id"}:
+            raise ValueError("attributes 不能覆盖核心事件字段")
 
     @classmethod
     def from_mapping(cls, row: dict[str, Any]) -> Event:
@@ -44,9 +50,9 @@ class Event:
 
     def to_mapping(self) -> dict[str, Any]:
         return {
+            **self.attributes,
             "schema_version": 1,
             "timestamp_ns": self.timestamp_ns,
             "event_type": self.event_type,
             "request_id": self.request_id,
-            **self.attributes,
         }

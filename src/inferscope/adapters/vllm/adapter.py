@@ -37,13 +37,13 @@ class VLLMAdapter(TraceAdapter):
                 queued_at = start
                 scheduled_at = start + queue_seconds
                 events.extend((
-                    span_event(queued_at, "REQUEST_QUEUED", request_id, {"source": self.framework}),
-                    span_event(scheduled_at, "REQUEST_SCHEDULED", request_id, {"source": self.framework}),
+                    span_event(queued_at, "REQUEST_QUEUED", request_id, {"source": self.framework, "timestamp_source": "DERIVED"}),
+                    span_event(scheduled_at, "REQUEST_SCHEDULED", request_id, {"source": self.framework, "timestamp_source": "DERIVED"}),
                 ))
                 if prefill_seconds is not None:
                     events.extend((
-                        span_event(scheduled_at, "PREFILL_STARTED", request_id, {"source": self.framework}),
-                        span_event(scheduled_at + prefill_seconds, "PREFILL_FINISHED", request_id, {"source": self.framework}),
+                        span_event(scheduled_at, "PREFILL_STARTED", request_id, {"source": self.framework, "timestamp_source": "DERIVED"}),
+                        span_event(scheduled_at + prefill_seconds, "PREFILL_FINISHED", request_id, {"source": self.framework, "timestamp_source": "DERIVED"}),
                     ))
 
             completion_tokens = integer(attrs.get("gen_ai.usage.completion_tokens"))

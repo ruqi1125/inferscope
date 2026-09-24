@@ -20,6 +20,7 @@ class WorkloadReuseReport:
     actual_hit_ratio: float
     lost_reuse_ratio: float
     lost_reuse_by_reason: dict[str, int]
+    analysis_mode: str = "SIMULATED"
 
     def to_mapping(self) -> dict[str, object]:
         return asdict(self)

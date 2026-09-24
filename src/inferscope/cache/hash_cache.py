@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from collections import OrderedDict
 
-from inferscope.cache.base import CacheLookup, CacheStats, classify_miss
+from inferscope.cache.base import CacheLookup, CacheStats, classify_miss, validate_cache_config
 
 
 class HashBlockCache:
     def __init__(self, block_size: int = 16, capacity_blocks: int = 4096):
-        if block_size <= 0 or capacity_blocks < 0:
-            raise ValueError("block_size 必须大于 0，capacity_blocks 不能为负数")
+        validate_cache_config(block_size, capacity_blocks)
         self.block_size = block_size
         self.capacity_blocks = capacity_blocks
         self._blocks: OrderedDict[tuple[tuple[int, ...], ...], None] = OrderedDict()

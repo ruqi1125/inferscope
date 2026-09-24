@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 from inferscope.core.events import Event
 
@@ -24,6 +24,7 @@ class RequestSummary:
     e2e_ns: int | None
     input_tokens: int | None
     output_tokens: int | None
+    latency_sources: dict[str, str] = field(default_factory=dict)
 
     def to_mapping(self) -> dict[str, object]:
         return asdict(self)
@@ -80,6 +81,12 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
         if input_tokens is None and arrived_event is not None:
             input_tokens = arrived_event.attributes.get("input_tokens")
         output_tokens = finished_event.attributes.get("output_tokens") if finished_event else None
+        durations = dict(queue_ns=queue_ns, prefill_ns=prefill_ns, decode_ns=decode_ns,
+                         ttft_ns=ttft_ns, e2e_ns=e2e_ns)
+        latency_sources = {
+            name: "UNKNOWN" if value is None else "OBSERVED" if measured_duration(name) is not None else "DERIVED"
+            for name, value in durations.items()
+        }
         summaries.append(RequestSummary(
             request_id=request_id,
             event_count=len(rows),
@@ -95,5 +102,6 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
             e2e_ns=e2e_ns,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            latency_sources=latency_sources,
         ))
     return sorted(summaries, key=lambda row: row.request_id)
