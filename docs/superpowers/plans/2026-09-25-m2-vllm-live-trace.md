@@ -31,7 +31,7 @@
 
 ---
 
-### 任务 1：只读预检并选择既有模型
+### Task 1: 只读预检并选择既有模型
 
 **文件：** 无。
 
@@ -53,7 +53,7 @@ python -c "import grpc; from importlib.metadata import version; from opentelemet
 
 预期：能选出安全可用的现有权重和端口。若权重位于该目录以外，只检查用户指出的现有模型目录；若没有合适权重、GPU 显存不足或没有安全端口，则暂停并询问，不下载、不安装、不触碰既有服务。
 
-### 任务 2：实现临时 OTLP 接收器并采集一次真实请求
+### Task 2: 实现临时 OTLP 接收器并采集一次真实请求
 
 **文件：**
 
@@ -128,7 +128,7 @@ PYTHONPATH=src python -m inferscope inspect "$TEMP_DIR/trace.jsonl" "$RAW_REQUES
 
 逐字段将原始 `llm_request` 的 request id、起止时间、token 数和已有 latency 属性与事件/摘要比较；临时报告不得复制到仓库。若服务不能安全启动、没有导出请求 span 或无法逐字段核对，暂停报告，不重发请求。
 
-### 任务 3：生成脱敏 fixture 并增加源数据回归
+### Task 3: 生成脱敏 fixture 并增加源数据回归
 
 **文件：**
 
@@ -275,7 +275,7 @@ pytest tests/test_vllm_live_fixture.py tests/test_adapters.py tests/test_analyze
 
 预期：新增测试和现有 parent-span、缺失边界测试都通过。源数据没有的 KV/Prefix Cache/Scheduler 字段不加到 fixture。
 
-### 任务 4：文档、全量基本测试和 M2 结项
+### Task 4: 文档、全量基本测试和 M2 结项
 
 **文件：**
 
