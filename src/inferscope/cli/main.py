@@ -20,6 +20,7 @@ from inferscope.cache.radix_cache import RadixPrefixCache
 from inferscope.core.events import Event
 from inferscope.replay.engine import ReplayReport, replay
 from inferscope.storage.jsonl import read_events, read_workload, write_events
+from inferscope.runtime.vllm_stats import read_stats, summarize_stats
 
 
 def _cache(name: str, block_size: int, capacity: int):
@@ -124,6 +125,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="inferscope", description="LLM Serving Runtime 分析工具")
     commands = parser.add_subparsers(dest="command", required=True)
 
+    runtime_parser = commands.add_parser("runtime-stats", help="分析 vLLM 原生缓存与服务级调度统计")
+    runtime_parser.add_argument("stats")
+    runtime_parser.add_argument("--json", action="store_true")
+
     replay_parser = commands.add_parser("replay", help="回放 workload 并模拟前缀缓存")
     replay_parser.add_argument("workload")
     replay_parser.add_argument("--cache", choices=("hash", "radix"), default="radix")
@@ -157,6 +162,30 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _run(args: argparse.Namespace) -> int:
+    if args.command == "runtime-stats":
+        report = summarize_stats(read_stats(args.stats))
+        if args.json:
+            _print_json(report)
+        else:
+            for request in report["requests"]:
+                cached = request["cached_tokens"]
+                shown = "UNKNOWN" if cached is None else str(cached)
+                print(f"请求 {request['request_id']}  缓存 tokens={shown}  来源={request['cached_tokens_source']}")
+            for engine in report["engines"]:
+                samples = engine["scheduler_samples"]
+                preemptions = engine["preemptions_in_capture"]
+                shown = "UNKNOWN" if preemptions is None else str(preemptions)
+                latest = samples[-1] if samples else None
+                if latest is None:
+                    scheduler = "UNKNOWN"
+                else:
+                    scheduler = (
+                        f"运行={latest['running_requests']} 等待={latest['waiting_requests']} "
+                        f"KV利用率={latest['kv_cache_usage']:.1%}"
+                    )
+                print(f"Engine {engine['engine_index']}（服务级） 快照={len(samples)}  最新={scheduler}  采集内抢占数={shown}")
+            print("逐请求抢占、缓存来源、miss 原因和 KV 生命周期：UNKNOWN")
+        return 0
     if args.command == "adapt":
         source = Path(args.otel_json)
         try:

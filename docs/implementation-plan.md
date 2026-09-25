@@ -54,7 +54,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 | M0 代码源与交付基线 | 已完成 | 本地、GitHub `main` 与服务器 `/home/nas511/zhangruqi/deeper` 的 `main` 均已同步且工作区干净。合并提交保留原本地与 GitHub 两侧历史，未强推；服务器通过 Git bundle 快进同步。同步前后离线测试均为 16 项通过。 |
 | M1 离线分析核心 | 已完成 | 直接构造和 JSONL 输入共用校验；Workload 与 vLLM OTel 十进制时间按纳秒精度稳定换算，并将纳秒结果限制为最多 4096 位以防极端指数造成无界分配；重复生命周期边界显式报告，歧义推导值保持 UNKNOWN；请求、Adapter、KV、Replay/Compare 报告标注实测/推导/模拟来源；Radix 淘汰会回收无效 trie 路径。Hash/Radix 容量与驱逐按前缀 block entry 计。全套测试 74 项及 3 个子用例在本地和远端 `agent-235` 环境通过。 |
 | M2 vLLM 真实 Trace 链路 | 已完成 | 在现有 vLLM 0.29.0 环境对既有 Llama-3-8B-Instruct 仅发送一条合成请求；采集到唯一 `llm_request`（聚合 OTLP 共 110 spans），将 request id、起止时间、14/8 token 和实际提供的五项 latency 与 Adapter/CLI 逐项核对。脱敏白名单 fixture：`tests/fixtures/vllm-0.29.0-otel.json`；`adapt`、`summary`、`inspect` 均成功；新增 fixture/CLI/UNKNOWN 回归及全套测试 78 项和 3 个子用例通过。未启用 detailed traces；KV、Prefix Cache、Scheduler 仍未由本次 trace 证明，按路线留待 M3。 |
-| M3 真实 Cache/Scheduler 观测 | 未完成 | 缺少已接入并核验的逐请求事件来源。 |
+| M3 真实 Cache/Scheduler 观测 | 进行中 | 已接入 vLLM 0.29.0 原生 StatLogger：完成时逐请求缓存 token（含 request ID）、engine 级 Scheduler 快照与抢占计数；真实重复前缀请求实测首次 0/360、再次 352/360 cached tokens，20 条快照已保存为脱敏 fixture。逐请求 Scheduler、KV block 生命周期仍无来源，详见 `docs/m3-native-stats.md`。 |
 | M4 Aider + vLLM 验收 | 未开始 | 等待 M2 门槛；Aider 是验收对象，不是产品开发方向。 |
 | M5 SGLang 实测 | 未开始 | 目前只有离线 Adapter。 |
 | M6 发布质量 | 未开始 | 按前序里程碑产出更新。 |
