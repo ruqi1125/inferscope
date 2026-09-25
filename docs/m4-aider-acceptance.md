@@ -4,7 +4,9 @@
 
 ## 当前状态
 
-M4 尚未执行。2026-09-25 对 `100.120.119.84` 做只读环境检查时，vLLM/Aider 专用端口未发现可复用服务，GPU 有另一进程占用；系统 PATH 未找到 Aider，已检查的 `agent-235/.venv` 有 vLLM 命令但没有 Aider 命令。为避免影响共享任务，没有停止进程或抢占 GPU。待资源空闲后，在临时 venv 安装固定版本 Aider，并在临时实验目录运行。
+M4 尚未执行。2026-09-26 再次只读检查 `100.120.119.84`：GPU 0 空闲约 7.0 GiB、GPU 1 空闲约 8.9 GiB，GPU 1 利用率 97%；固定候选 Llama-3-8B-Instruct 无法按既定配置安全启动。OTLP/vLLM 实验端口未占用；系统 PATH 和已检查的用户目录深度内未找到 Aider，`agent-235/.venv` 中有 vLLM 但没有 Aider。远端仓库仍为 `4857b5a` 且工作区干净。没有停止或复用其他进程，也没有安装 Aider/启动服务。
+
+同日对当前代码执行 `python -m pytest -q`：105 passed，3 subtests passed。另用随仓库保存的 vLLM 0.29.0 脱敏 OTel trace 与 native-stats JSONL 实际运行 `adapt → summary`：6 个事件形成 1 个请求，五项延迟均标为 `OBSERVED`；trace 请求与 native 统计属于不同采集轮次，关联报告为 0 matched、各自 unmatched，逐请求缓存值保持 `UNKNOWN`，engine 级 Scheduler/Prefix Cache/KV 淘汰仍单独报告。该检查验证的是已保存样本的 CLI 行为，不是新的 live inference 或 Aider 验收，不能代替 M4。
 
 ## 固定编码任务
 

@@ -55,7 +55,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 | M1 离线分析核心 | 已完成 | 直接构造和 JSONL 输入共用校验；Workload 与 vLLM OTel 十进制时间按纳秒精度稳定换算，并将纳秒结果限制为最多 4096 位以防极端指数造成无界分配；重复生命周期边界显式报告，歧义推导值保持 UNKNOWN；请求、Adapter、KV、Replay/Compare 报告标注实测/推导/模拟来源；Radix 淘汰会回收无效 trie 路径。Hash/Radix 容量与驱逐按前缀 block entry 计。全套测试 74 项及 3 个子用例在本地和远端 `agent-235` 环境通过。 |
 | M2 vLLM 真实 Trace 链路 | 已完成 | 在现有 vLLM 0.29.0 环境对既有 Llama-3-8B-Instruct 仅发送一条合成请求；采集到唯一 `llm_request`（聚合 OTLP 共 110 spans），将 request id、起止时间、14/8 token 和实际提供的五项 latency 与 Adapter/CLI 逐项核对。脱敏白名单 fixture：`tests/fixtures/vllm-0.29.0-otel.json`；`adapt`、`summary`、`inspect` 均成功；新增 fixture/CLI/UNKNOWN 回归及全套测试 78 项和 3 个子用例通过。未启用 detailed traces；KV、Prefix Cache、Scheduler 仍未由本次 trace 证明，按路线留待 M3。 |
 | M3 真实 Cache/Scheduler 观测 | 已完成（vLLM 0.29.0 可安全接入范围） | 原生 StatLogger 的逐请求缓存 token（含 request ID/回调采集时间）、engine 级 Scheduler/Prefix Cache 统计、可选 KV 淘汰样本均保留来源与 scope；`summary --runtime-stats` 支持多 engine 文件，按唯一 request ID 关联，缺失/重复/跨 engine 歧义保持 UNKNOWN。真实重复前缀实测首次 0/360、再次 352/360 cached tokens，PrefixCacheStats 720 queries/352 hits，20 条快照和 1 条淘汰样本在脱敏 fixture；全量 105 项及 3 个子用例通过。逐请求 Scheduler 与 block ID/完整生命周期不可得，明确不宣称覆盖；跨来源真实 ID 联表留给 M4 核验。 |
-| M4 Aider + vLLM 验收 | 待执行（远端资源阻塞） | 固定任务及 Aider/vLLM 隔离运行办法见 `docs/m4-aider-acceptance.md`。2026-09-25 只读检查发现远端 GPU 有其它进程占用，默认环境未发现 Aider；未停止服务、未抢占资源，也未声称 M4 通过。 |
+| M4 Aider + vLLM 验收 | 待执行（远端资源阻塞） | 固定任务及 Aider/vLLM 隔离运行办法见 `docs/m4-aider-acceptance.md`。2026-09-26 复核远端两卡空闲显存约 7.0/8.9 GiB、GPU 1 利用率 97%，未找到 Aider；没有启动模型或复用他人服务。全套测试 105 项及 3 个子用例通过，已有脱敏 OTel/native-stats 样本的 CLI 检查符合 UNKNOWN 与 scope 边界；同一轮 Agent 请求与 Runtime trace 的 live 关联仍未验证。 |
 | M5 SGLang 实测 | 未开始 | 目前只有离线 Adapter。 |
 | M6 发布质量 | 未开始 | 按前序里程碑产出更新。 |
 
