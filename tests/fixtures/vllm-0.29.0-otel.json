@@ -1,0 +1,67 @@
+{
+  "resourceSpans": [
+    {
+      "scopeSpans": [
+        {
+          "spans": [
+            {
+              "name": "llm_request",
+              "startTimeUnixNano": "1790341371953418752",
+              "endTimeUnixNano": "1790341372208341144",
+              "attributes": [
+                {
+                  "key": "gen_ai.latency.time_to_first_token",
+                  "value": {
+                    "doubleValue": 0.11554598808288574
+                  }
+                },
+                {
+                  "key": "gen_ai.latency.e2e",
+                  "value": {
+                    "doubleValue": 0.25359678268432617
+                  }
+                },
+                {
+                  "key": "gen_ai.latency.time_in_queue",
+                  "value": {
+                    "doubleValue": 5.4589007049798965e-05
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.prompt_tokens",
+                  "value": {
+                    "intValue": "14"
+                  }
+                },
+                {
+                  "key": "gen_ai.usage.completion_tokens",
+                  "value": {
+                    "intValue": "8"
+                  }
+                },
+                {
+                  "key": "gen_ai.latency.time_in_model_prefill",
+                  "value": {
+                    "doubleValue": 0.057814636995317414
+                  }
+                },
+                {
+                  "key": "gen_ai.latency.time_in_model_decode",
+                  "value": {
+                    "doubleValue": 0.13830458300071768
+                  }
+                },
+                {
+                  "key": "gen_ai.request.id",
+                  "value": {
+                    "stringValue": "req-vllm-029-001"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -37,7 +37,7 @@
 
 **输入/产出：** 使用远端现有 `.venv-vllm29` 和用户指出的 `models` 目录；确认 vLLM/OTel 依赖、合适的既有模型、GPU 状态和两个未占用端口。此任务不得改代码、下载文件或改变服务状态。
 
-- [ ] **步骤 1：核对环境版本和接收器导入路径**
+- [x] **步骤 1：核对环境版本和接收器导入路径**
 
 在远端既有 `.venv-vllm29` 中运行：
 
@@ -47,7 +47,7 @@ python -c "import grpc; from importlib.metadata import version; from opentelemet
 
 预期：vLLM 为 `0.29.0`，两个 OTLP 模块可导入，并能输出已安装包版本。若导入失败，不安装任何依赖，记录缺少的包并暂停。
 
-- [ ] **步骤 2：只读检查模型、GPU 和端口**
+- [x] **步骤 2：只读检查模型、GPU 和端口**
 
 在远端 InferScope 仓库目录运行 `find models -maxdepth 3 -type f -name config.json -print`，查看候选 `config.json`、权重分片总大小、`nvidia-smi` 输出及 `ss -ltnp`。结合现有启动参数，选择最小且 vLLM 支持、显存可容纳的既有模型；不读取权重文件内容。确认 8000 端口监听者不变，并选择另两个当前未占用端口（接收器和隔离的 vLLM 服务各一个）。
 
@@ -63,11 +63,11 @@ python -c "import grpc; from importlib.metadata import version; from opentelemet
 
 **接口：** 接收器提供 `main()`，命令行参数为 `--port`（默认 4317）、必填的 `--output`、`--timeout-seconds`（默认 300）；只绑定 `127.0.0.1`，不提供外部监听选项。类 `TraceReceiver` 实现 `Export(request, context)`，用 `MessageToDict(request, preserving_proto_field_name=False)` 转换 protobuf，在锁保护下累加每次请求的 `resourceSpans`，并返回 `trace_service_pb2.ExportTraceServiceResponse()`。`document()` 返回 `{"resourceSpans": [...]}`。接收器退出时写单个聚合 OTLP JSON；若未收到 span 则非零退出且不生成空文件。日志只记录监听地址和 span 数量，不记录属性或 prompt。
 
-- [ ] **步骤 1：实现独立接收器，不把它导入产品代码**
+- [x] **步骤 1：实现独立接收器，不把它导入产品代码**
 
 仅在脚本中导入 `grpc`、`google.protobuf.json_format.MessageToDict` 和 `opentelemetry.proto.collector.trace.v1.trace_service_pb2{,_grpc}`。使用两个 gRPC worker；实现 SIGINT/SIGTERM 退出和有界超时；退出后再写 JSON。脚本不得被 `src/inferscope` 导入，也不得增加 `pyproject.toml` 依赖。
 
-- [ ] **步骤 2：检查语法及命令行帮助**
+- [x] **步骤 2：检查语法及命令行帮助**
 
 在远端 vLLM 环境运行：
 
@@ -78,7 +78,7 @@ python scripts/vllm_otel_receiver.py --help
 
 预期：两条命令成功；`--help` 不绑定端口。
 
-- [ ] **步骤 3：验证多批次聚合**
+- [x] **步骤 3：验证多批次聚合**
 
 在 `scripts/test_vllm_otel_receiver.py` 中建立两个 `ExportTraceServiceRequest`：第一批包含名为 `llm_request` 的 span，第二批包含名为 `worker` 的 span。调用同一 `TraceReceiver` 两次后断言文档中有两个 `resourceSpans`，span 名按顺序为 `llm_request`、`worker`。测试代码：
 
@@ -111,7 +111,7 @@ if __name__ == "__main__":
 
 运行 `python scripts/test_vllm_otel_receiver.py -v`；预期通过，且不监听端口、不加载模型。
 
-- [ ] **步骤 4：启动专属进程并只发一条合成请求**
+- [x] **步骤 4：启动专属进程并只发一条合成请求**
 
 启动前用 `TEMP_DIR="$(mktemp -d)"` 创建并记录唯一本次临时目录，只在其中写本次 receiver 输出、PID 和服务日志。使用任务 1 选出的接收器端口和模型路径，在 loopback 启动接收器；参考远端现有 vLLM 启动参数，但只把模型、服务端口和 `--otlp-traces-endpoint` 指向本次配置。不得复用现有服务端口、PID 文件、日志目标或清理命令。默认不启用 `--collect-detailed-traces`；仅在基础 span 缺少 M2 必需字段时，先记录缺少字段和已核对的开销，再决定是否启用。
 
@@ -138,11 +138,11 @@ PYTHONPATH=src python -m inferscope inspect "$TEMP_DIR/trace.jsonl" "$RAW_REQUES
 
 **接口：** 测试将 fixture 用 `json.loads(..., parse_float=Decimal)` 读取，选出唯一 `llm_request`，解码其 OTel typed attributes，再交给 `VLLMAdapter().to_events(document)` 和 `summarize_requests(events)`。fixture 中 request id 固定为 `req-vllm-029-001`。
 
-- [ ] **步骤 1：从一次真实采集制作最小白名单 fixture**
+- [x] **步骤 1：从一次真实采集制作最小白名单 fixture**
 
 保留 OTLP 的 `resourceSpans/scopeSpans/spans` 外壳，以及唯一 `llm_request` 的 name、起止 Unix 纳秒、request id、实际存在的 prompt/completion token 数和 latency 属性。如果有 `parentSpanId`，改写为 `parent-span-001`；没有则不添加。request id 改写为 `req-vllm-029-001`。移除 trace/span id、prompt/content 属性、所有 resource 属性、主机名、路径和无关 span。逐字段与原始临时采集核对后，只删除本次确切的临时原始文件和日志，再对临时目录执行非递归删除；若目录不为空则保留并报告，不递归清理。
 
-- [ ] **步骤 2：先写并运行真实 span 到事件的回归**
+- [x] **步骤 2：先写并运行真实 span 到事件的回归**
 
 在 `tests/test_vllm_live_fixture.py` 加辅助函数 `_typed_attributes(attributes)`，按 OTLP 列表中每项的 `key` 取 `value` 唯一 oneof 值；然后加入下列断言结构：
 
@@ -213,7 +213,7 @@ def test_real_vllm_request_matches_raw_span():
 
 另断言 fixture 全部 span attribute 名都属于显式白名单，且 `resourceSpans` 不带 `resource.attributes`。运行 `pytest tests/test_vllm_live_fixture.py -q`。若测试暴露真实格式与 Adapter 不符，保留失败断言后只做最小、有原始证据支持的修复；不添加猜测性 alias。
 
-- [ ] **步骤 3：验证缺失 latency 不会被伪造成观测值**
+- [x] **步骤 3：验证缺失 latency 不会被伪造成观测值**
 
 基于 fixture 深拷贝 document，移除 span 中所有 `gen_ai.latency.*` 属性，再运行当前 Adapter。单独测试需再次加载 fixture，不依赖另一测试的局部变量：
 
@@ -236,7 +236,7 @@ def test_missing_latency_fields_are_not_fabricated():
 
 该测试不改动已提交 fixture。
 
-- [ ] **步骤 4：验证真实 fixture 的 CLI 三段链路**
+- [x] **步骤 4：验证真实 fixture 的 CLI 三段链路**
 
 在测试中用 pytest 的 `tmp_path` 和 `subprocess.run([...])` 参数数组，不使用 shell 字符串，依次调用 `adapt`、`summary`、`inspect`。测试命令构造与验收至少包含：
 
@@ -285,11 +285,11 @@ pytest tests/test_vllm_live_fixture.py tests/test_adapters.py tests/test_analyze
 
 **接口：** Adapter 文档提供已验证的 vLLM 0.29.0 loopback 接收器调用、单请求 smoke、fixture 和 CLI 回归方式；唯一权威路线只在有真实采集与测试证据后标记 M2 完成，M3/M4 顺序不变。
 
-- [ ] **步骤 1：记录已验证的用法和边界**
+- [x] **步骤 1：记录已验证的用法和边界**
 
 在 `docs/adapters.md` 的 vLLM 小节记录接收器命令、经实测确认的 endpoint 写法、fixture 路径和 Adapter/CLI 检查命令。说明这是单请求 smoke，不是基准测试或 Agent 测试；未由源 span 提供的字段仍为 `UNKNOWN`，推导字段继续标记为 `DERIVED`。除非本次确实启用 detailed traces，否则不得写成已启用。
 
-- [ ] **步骤 2：跑全量基本回归并复核 CLI JSON**
+- [x] **步骤 2：跑全量基本回归并复核 CLI JSON**
 
 运行：
 
@@ -299,11 +299,11 @@ pytest -q
 
 预期：全套测试通过。再次读取三条 fixture CLI JSON，并与 fixture 对照。运行 `git diff --check`，确认工作区只涉及接收器及其测试、fixture、新回归测试和两份文档。若手工 CLI 使用临时文件，先验证临时目录的规范绝对路径位于系统临时目录，再仅删除本次创建的 JSON 文件并用 `rmdir` 删除空目录；不递归删除目录。
 
-- [ ] **步骤 3：仅凭实测记录 M2 完成**
+- [x] **步骤 3：仅凭实测记录 M2 完成**
 
 只修改 `docs/implementation-plan.md` 的 M2 状态/依据行，记下 vLLM 版本、一次真实请求、fixture 路径、实际 pytest 通过数及 CLI 检查项。保持 M3 和 M4 状态不变。若 M2 任一验收失败，M2 继续标记未完成，并记录缺少的具体证据。
 
-- [ ] **步骤 4：用中文提交已验证产物**
+- [x] **步骤 4：用中文提交已验证产物**
 
 ```bash
 git add scripts/vllm_otel_receiver.py scripts/test_vllm_otel_receiver.py src/inferscope/adapters/vllm/adapter.py tests/fixtures/vllm-0.29.0-otel.json tests/test_vllm_live_fixture.py docs/adapters.md docs/implementation-plan.md
