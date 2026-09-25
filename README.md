@@ -11,7 +11,7 @@ InferScope 是一个轻量级的 LLM Serving Runtime 分析工具，用来理解
 - `replay`：模拟 workload 的 prefix cache 复用。
 - `compare`：对相同 workload 比较 hash-block 与 radix cache。
 - `adapt`：把 vLLM/SGLang 的 OpenTelemetry JSON 导出转换为统一 trace JSONL；当前读取已导出的文件，不连接运行中的服务。
-- `runtime-stats`：离线分析 vLLM 0.29.0 原生采集器记录的逐请求缓存 token 与 engine 级 Scheduler 快照；字段范围、接入方式和实测结果见 [vLLM 原生统计](docs/m3-native-stats.md)。
+- `runtime-stats`：离线分析 vLLM 0.29.0 原生采集器记录的逐请求缓存 token、Prefix Cache 聚合和 engine 级 Scheduler/KV 淘汰样本；字段范围、接入方式和实测结果见 [vLLM 原生统计](docs/m3-native-stats.md)。
 - JSONL 输入校验，错误定位到文件和行号。
 
 ## 安装

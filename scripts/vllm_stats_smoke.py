@@ -17,7 +17,8 @@ async def run(model, output_directory):
     engine = AsyncLLM.from_engine_args(
         AsyncEngineArgs(model=model, max_model_len=2048, max_num_seqs=1,
                         gpu_memory_utilization=0.85, enforce_eager=True,
-                        enable_prefix_caching=True, disable_log_stats=False),
+                        enable_prefix_caching=True, disable_log_stats=False,
+                        kv_cache_metrics=True, kv_cache_metrics_sample=1.0),
         stat_loggers=[logger],
     )
     prompt = "Summarize this passage: " + "A river crosses a quiet valley with trees and farms. " * 32
@@ -49,8 +50,15 @@ async def run(model, output_directory):
             assert request[field] == value, (request["request_id"], field)
     assert expected["req-m3-cold"]["cached_tokens"] == 0
     assert expected["req-m3-warm"]["cached_tokens"] > 0
+    engine_report = report["engines"][0]
+    assert engine_report["prefix_cache_source"] == "OBSERVED"
+    assert engine_report["prefix_cache_hits_in_capture"] == expected["req-m3-warm"]["cached_tokens"]
     print(json.dumps({"verified_requests": expected,
-                      "scheduler_samples": len(report["engines"][0]["scheduler_samples"])}, indent=2))
+                      "scheduler_samples": len(engine_report["scheduler_samples"]),
+                      "prefix_cache_queries": sum(row["queries"] for row in engine_report["prefix_cache_samples"]),
+                      "prefix_cache_hits": engine_report["prefix_cache_hits_in_capture"],
+                      "kv_eviction_samples": len(engine_report["kv_eviction_samples"]),
+                      "kv_cache_metrics_sample_rate": engine_report["kv_cache_metrics_sample_rate"]}, indent=2))
 
 
 if __name__ == "__main__":

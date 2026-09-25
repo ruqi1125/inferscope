@@ -180,10 +180,18 @@ def _run(args: argparse.Namespace) -> int:
                     scheduler = "UNKNOWN"
                 else:
                     scheduler = (
-                        f"运行={latest['running_requests']} 等待={latest['waiting_requests']} "
+                        f"运行={latest['running_requests']} 普通等待={latest['waiting_requests']} "
+                        f"延后等待={latest.get('skipped_waiting_requests', 'UNKNOWN')} "
                         f"KV利用率={latest['kv_cache_usage']:.1%}"
                     )
                 print(f"Engine {engine['engine_index']}（服务级） 快照={len(samples)}  最新={scheduler}  采集内抢占数={shown}")
+                if engine["prefix_cache_samples"]:
+                    queries = engine["prefix_cache_queries_in_capture"]
+                    hits = engine["prefix_cache_hits_in_capture"]
+                    ratio = f"{hits / queries:.1%}" if queries else "UNKNOWN"
+                    print(f"  Prefix Cache（服务级）命中={hits}/{queries} tokens  比例={ratio}")
+                eviction_source = engine["kv_eviction_samples_source"]
+                print(f"  KV block 淘汰样本={len(engine['kv_eviction_samples'])}  来源={eviction_source}")
             print("逐请求抢占、缓存来源、miss 原因和 KV 生命周期：UNKNOWN")
         return 0
     if args.command == "adapt":
