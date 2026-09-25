@@ -33,7 +33,8 @@
 - [ ] GPU 可安全使用且独立 Aider venv 准备好后，运行 Aider 真实任务，临时保留 raw trace，脱敏提取 fixture、分析 JSON、diff 与测试结果，随后清理临时目录。
 - [ ] 不对 per-request Scheduler 或完整 KV lifecycle 作无证据结论。
 
-## 任务 5：集成（进行中）
+## 任务 5：集成（已完成）
 
 - [x] 按可安全采集范围完成 M3，并明确保留的观测缺口。
-- [ ] 验证通过后将中文提交快进合并至 main 并推送；遇到非快进或远端已有新改动时停止合并、先同步复核。
+- [x] 中文提交已快进合并并推送 GitHub `main`；NAS `/home/nas511/zhangruqi/deeper` 也快进同步至 `7ade70e`。
+- [x] 本地与 NAS 全量测试均为 105 项及 3 个子用例通过；NAS 工作区干净。
