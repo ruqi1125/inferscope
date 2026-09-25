@@ -54,8 +54,8 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 | M0 代码源与交付基线 | 已完成 | 本地、GitHub `main` 与服务器 `/home/nas511/zhangruqi/deeper` 的 `main` 均已同步且工作区干净。合并提交保留原本地与 GitHub 两侧历史，未强推；服务器通过 Git bundle 快进同步。同步前后离线测试均为 16 项通过。 |
 | M1 离线分析核心 | 已完成 | 直接构造和 JSONL 输入共用校验；Workload 与 vLLM OTel 十进制时间按纳秒精度稳定换算，并将纳秒结果限制为最多 4096 位以防极端指数造成无界分配；重复生命周期边界显式报告，歧义推导值保持 UNKNOWN；请求、Adapter、KV、Replay/Compare 报告标注实测/推导/模拟来源；Radix 淘汰会回收无效 trie 路径。Hash/Radix 容量与驱逐按前缀 block entry 计。全套测试 74 项及 3 个子用例在本地和远端 `agent-235` 环境通过。 |
 | M2 vLLM 真实 Trace 链路 | 已完成 | 在现有 vLLM 0.29.0 环境对既有 Llama-3-8B-Instruct 仅发送一条合成请求；采集到唯一 `llm_request`（聚合 OTLP 共 110 spans），将 request id、起止时间、14/8 token 和实际提供的五项 latency 与 Adapter/CLI 逐项核对。脱敏白名单 fixture：`tests/fixtures/vllm-0.29.0-otel.json`；`adapt`、`summary`、`inspect` 均成功；新增 fixture/CLI/UNKNOWN 回归及全套测试 78 项和 3 个子用例通过。未启用 detailed traces；KV、Prefix Cache、Scheduler 仍未由本次 trace 证明，按路线留待 M3。 |
-| M3 真实 Cache/Scheduler 观测 | 进行中 | 已接入 vLLM 0.29.0 原生 StatLogger：逐请求缓存 token（含 request ID）、engine 级 Scheduler/Prefix Cache 统计、可选 KV 淘汰样本；真实重复前缀请求实测首次 0/360、再次 352/360 cached tokens，PrefixCacheStats 汇总 720 queries/352 hits，20 条快照保存在脱敏 fixture。逐请求 Scheduler 与完整 block 生命周期图仍不可得；详见 `docs/m3-native-stats.md`。 |
-| M4 Aider + vLLM 验收 | 未开始 | 等待 M2 门槛；Aider 是验收对象，不是产品开发方向。 |
+| M3 真实 Cache/Scheduler 观测 | 已完成（vLLM 0.29.0 可安全接入范围） | 原生 StatLogger 的逐请求缓存 token（含 request ID/回调采集时间）、engine 级 Scheduler/Prefix Cache 统计、可选 KV 淘汰样本均保留来源与 scope；`summary --runtime-stats` 支持多 engine 文件，按唯一 request ID 关联，缺失/重复/跨 engine 歧义保持 UNKNOWN。真实重复前缀实测首次 0/360、再次 352/360 cached tokens，PrefixCacheStats 720 queries/352 hits，20 条快照和 1 条淘汰样本在脱敏 fixture；全量 105 项及 3 个子用例通过。逐请求 Scheduler 与 block ID/完整生命周期不可得，明确不宣称覆盖；跨来源真实 ID 联表留给 M4 核验。 |
+| M4 Aider + vLLM 验收 | 待执行（远端资源阻塞） | 固定任务及 Aider/vLLM 隔离运行办法见 `docs/m4-aider-acceptance.md`。2026-09-25 只读检查发现远端 GPU 有其它进程占用，默认环境未发现 Aider；未停止服务、未抢占资源，也未声称 M4 通过。 |
 | M5 SGLang 实测 | 未开始 | 目前只有离线 Adapter。 |
 | M6 发布质量 | 未开始 | 按前序里程碑产出更新。 |
 
@@ -83,7 +83,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 
 **工作：** 基于目标 vLLM 版本实际提供的事件/接口，接入有证据支持的 Prefix Cache、KV 生命周期和 Scheduler 数据，并将其映射到统一事件模型。优先使用 Runtime 已提供的可观测数据；如原生数据不足，先报告具体缺口及影响，再提出最小、可隔离的可选采集方案。
 
-**通过条件：** 报告能区分逐请求事件、服务级聚合值、模拟值和未知值；Cache/Scheduler 分析均可追溯到原始事件。若必须大范围改 Runtime 内部实现才能取得数据，暂停该项并先取得用户对新方案的明确批准，不把不可观测字段写成已完成。
+**通过条件：** 报告能区分逐请求观测、服务级聚合值、模拟值和未知值；Cache/Scheduler 分析保留原生来源、scope、request/engine ID 及采集时间，可回查原始 JSONL。若必须大范围改 Runtime 内部实现才能取得逐请求 Scheduler 或完整 block 生命周期，记录为不支持并保持 UNKNOWN；未经用户明确批准不改 Runtime 内部，不把不可观测字段写成已完成。
 
 ### M4：Aider + vLLM 真实验收
 

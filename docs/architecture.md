@@ -12,7 +12,8 @@ InferScope 是轻量级的 LLM Serving Runtime 分析工具，帮助开发者回
 4. `replay` 将 workload 输入缓存模拟器，并产出统一事件流。
 5. `analyzers` 只消费 InferScope Event Stream，不导入 vLLM/SGLang。
 6. `adapters` 将框架可观测数据映射为统一事件；无法映射的字段保留未知状态。
-7. `cli` 是主要入口，报告同时支持人类可读和 JSON 输出。
+7. `runtime` 可选接入经过版本限定的框架原生统计回调，并使用独立 JSONL 契约；不把服务级数据伪装成请求事件。
+8. `cli` 是主要入口，报告同时支持人类可读和 JSON 输出；可按唯一 request ID 关联 trace 与原生逐请求观测。
 
 ```text
 Workload ──► Replay ──► Cache Simulator ──► Event Stream
@@ -28,6 +29,8 @@ Trace JSONL ──────────────────────�
                                       CLI / JSON Report
 
 vLLM / SGLang ──► Framework Adapter ──► Event Stream
+
+vLLM StatLogger ──► Native Stats JSONL ──► summary（按唯一 request ID 关联）
 ```
 
 ## 核心数据契约
@@ -47,7 +50,9 @@ core ◄── storage
   └── cli ──► 各分析模块与报告
 ```
 
-`core`、`cache`、`analyzers` 不依赖任何 Serving Framework；vLLM 和 SGLang 依赖只允许出现在各自 adapter 子包中，并作为可选依赖安装。
+`core`、`cache`、`analyzers` 不依赖任何 Serving Framework；vLLM 和 SGLang 依赖只出现在各自 adapter 子包或明确的可选 runtime collector 中，并作为可选依赖安装。
+
+`runtime.vllm_stats` 的离线读取和分析仅依赖标准库；只有调用采集器工厂时才导入经验证版本的 vLLM。请求级缓存观测按 request ID、engine 和回调采集时间保留；Scheduler、Prefix Cache 聚合与 KV 淘汰样本维持 `ENGINE` scope。CLI 只有在 ID 两侧唯一且原生值确实观测到时才关联；缺失或歧义保持 `UNKNOWN`。这两类数据不被强行转换为统一 Event。
 
 ## 路线文档
 

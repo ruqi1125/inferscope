@@ -79,6 +79,8 @@ def test_duplicate_request_observations_are_ambiguous(tmp_path):
     assert row["ambiguous"] is True
     assert row["cached_tokens"] is None
     assert row["cached_tokens_source"] == "UNKNOWN"
+    assert row["observed_at_ns"] is None
+    assert len(row["observed_at_ns_samples"]) == 2
 
 
 @pytest.mark.parametrize("field,value", [("cached_tokens", 65), ("cached_tokens", -1),
@@ -157,6 +159,7 @@ def test_real_vllm_capture_fixture_records_cold_and_warm_prefix_cache():
     assert requests["req-m3-warm"]["input_tokens"] == 360
     assert requests["req-m3-warm"]["output_tokens"] == 8
     assert requests["req-m3-warm"]["cached_tokens"] == 352
+    assert isinstance(requests["req-m3-warm"]["observed_at_ns"], int)
     assert len(report["engines"][0]["scheduler_samples"]) == 20
     assert report["engines"][0]["scope"] == "ENGINE"
     assert report["engines"][0]["prefix_cache_source"] == "OBSERVED"

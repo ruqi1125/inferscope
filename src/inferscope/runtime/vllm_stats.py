@@ -279,16 +279,20 @@ def summarize_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         _validate(row)
         engines[row["engine_index"]].append(row)
         for request in row["requests"]:
-            requests[(row["engine_index"], request["request_id"])].append(request)
+            requests[(row["engine_index"], request["request_id"])].append(
+                (request, row["observed_at_ns"])
+            )
     request_reports = []
     for (engine_index, request_id), observations in sorted(requests.items()):
         ambiguous = len(observations) != 1
-        stats = observations[0]
+        stats, observed_at_ns = observations[0]
         prompt = None if ambiguous else stats["input_tokens"]
         cached = None if ambiguous else stats["cached_tokens"]
         request_reports.append({
             "request_id": request_id, "engine_index": engine_index, "scope": "REQUEST",
             "observations": len(observations), "ambiguous": ambiguous,
+            "observed_at_ns": None if ambiguous else observed_at_ns,
+            "observed_at_ns_samples": [observed for _, observed in observations],
             "input_tokens": prompt, "output_tokens": None if ambiguous else stats["output_tokens"],
             "cached_tokens": cached, "cached_tokens_source": "UNKNOWN" if ambiguous else "OBSERVED",
             "cached_fraction": cached / prompt if prompt else None,

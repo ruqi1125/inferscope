@@ -19,8 +19,9 @@ from inferscope.cache.hash_cache import HashBlockCache
 from inferscope.cache.radix_cache import RadixPrefixCache
 from inferscope.core.events import Event
 from inferscope.replay.engine import ReplayReport, replay
-from inferscope.storage.jsonl import read_events, read_workload, write_events
+from inferscope.runtime.correlation import correlate_runtime_stats
 from inferscope.runtime.vllm_stats import read_stats, summarize_stats
+from inferscope.storage.jsonl import read_events, read_workload, write_events
 
 
 def _cache(name: str, block_size: int, capacity: int):
@@ -113,6 +114,43 @@ def _format_summary(data: dict[str, Any], as_json: bool) -> None:
         print(f"KV evictions           {kv['evictions']}")
         print("KV 统计来源            输入事件推导（DERIVED）")
         print(f"KV 利用率              {utilization}")
+    runtime_stats = data.get("runtime_stats")
+    if runtime_stats is not None:
+        correlation = runtime_stats["correlation"]
+        print(
+            "request ID 关联        "
+            f"{correlation['matched_requests']} 个成功，"
+            f"trace 未匹配 {len(correlation['unmatched_trace_request_ids'])} 个，"
+            f"native 未匹配 {len(correlation['unmatched_runtime_request_ids'])} 个，"
+            f"歧义 {len(correlation['ambiguous_request_ids'])} 个，"
+            f"原生值未知 {len(correlation['unknown_native_value_request_ids'])} 个"
+        )
+        print("\n请求级缓存观测（vLLM 原生，按 request ID 关联）")
+        for row in data["requests_detail"]:
+            observation = row["runtime_stats"]
+            if observation["status"] == "OBSERVED":
+                input_tokens = row.get("input_tokens")
+                input_shown = "UNKNOWN" if input_tokens is None else input_tokens
+                shown = f"{observation['cached_tokens']}/{input_shown}"
+                suffix = (
+                    f"来源=OBSERVED，engine={observation['engine_index']}，"
+                    f"observed_at_ns={observation['observed_at_ns']}"
+                )
+            else:
+                shown = "UNKNOWN"
+                suffix = f"原因={observation['reason']}"
+            print(f"  {row['request_id']:<24} cached tokens={shown}  {suffix}")
+        print("服务级 vLLM 原生统计（ENGINE scope，不归因到单请求）")
+        for engine in runtime_stats["engines"]:
+            prefix_hits = engine["prefix_cache_hits_in_capture"]
+            prefix_queries = engine["prefix_cache_queries_in_capture"]
+            prefix = f"{prefix_hits}/{prefix_queries}" if prefix_queries else "UNKNOWN"
+            print(
+                f"  engine={engine['engine_index']} 快照={len(engine['scheduler_samples'])} "
+                f"Prefix Cache hits/queries={prefix} "
+                f"KV 淘汰样本={len(engine['kv_eviction_samples'])} "
+                f"来源={engine['kv_eviction_samples_source']}"
+            )
 
 
 def _add_common_cache_args(parser: argparse.ArgumentParser) -> None:
@@ -142,6 +180,10 @@ def build_parser() -> argparse.ArgumentParser:
     summary_parser = commands.add_parser("summary", help="汇总 trace")
     summary_parser.add_argument("trace")
     summary_parser.add_argument("--capacity-blocks", type=int, help="KV cache 总容量，用于计算利用率")
+    summary_parser.add_argument(
+        "--runtime-stats", action="append", metavar="FILE",
+        help="关联一个 vLLM 原生统计 JSONL；多 engine 可重复指定",
+    )
     summary_parser.add_argument("--json", action="store_true")
 
     inspect_parser = commands.add_parser("inspect", help="查看单个请求")
@@ -241,7 +283,11 @@ def _run(args: argparse.Namespace) -> int:
         return 0
     events = read_events(args.trace)
     if args.command == "summary":
-        _format_summary(_summary(events, args.capacity_blocks), args.json)
+        report = _summary(events, args.capacity_blocks)
+        if args.runtime_stats:
+            runtime_rows = [row for path in args.runtime_stats for row in read_stats(path)]
+            report = correlate_runtime_stats(report, summarize_stats(runtime_rows))
+        _format_summary(report, args.json)
         return 0
     if args.command == "inspect":
         request_events = [event for event in events if event.request_id == args.request_id]
