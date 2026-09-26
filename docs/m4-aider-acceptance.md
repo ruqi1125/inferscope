@@ -25,6 +25,10 @@ M4 尚未通过。2026-09-26 在用户确认资源空闲后，按固定任务进
 
 同日对当前代码执行 `python -m pytest -q`：105 passed，3 subtests passed。另用随仓库保存的 vLLM 0.29.0 脱敏 OTel trace 与 native-stats JSONL 实际运行 `adapt → summary`：6 个事件形成 1 个请求，五项延迟均标为 `OBSERVED`；trace 请求与 native 统计属于不同采集轮次，关联报告为 0 matched、各自 unmatched，逐请求缓存值保持 `UNKNOWN`，engine 级 Scheduler/Prefix Cache/KV 淘汰仍单独报告。该检查验证的是已保存样本的 CLI 行为，不是新的 live inference 或 Aider 验收，不能代替 M4。
 
+应用户授权，2026-09-26 准备改用已有 `/home/nas511/zhangruqi/models/Qwen3.6-27B-GPTQ-Int4`，保持固定任务、预置接受测试和 prompt SHA-256 不变。模型目录已有权重及完整 tokenizer；`config.json` 为 `model_type=qwen3_5`、架构 `Qwen3_5ForConditionalGeneration`、上下文上限 262,144；现有 vLLM 0.29.0 安装包含该架构实现。本次没有下载模型权重或 tokenizer。独立 Aider 0.86.2/pytest 环境已在 `/tmp` 创建；在基线 `985c1e2abaffda333fdca2854231e3c793b87503` 预置的测试 blob 与记录一致，基线测试按预期因尚无 `inferscope.runtime.correlation` 而收集失败。
+
+GPU 预检在 14:53 时两卡空闲；准备环境期间，另一项训练任务于 15:07 开始占用两卡。本次没有在服务启动前重新检查，15:11 启动 vLLM 时便因显存不足退出：CUDA 1 仅剩 8.66/23.56 GiB，低于 `--gpu-memory-utilization 0.85` 对应的 20.02 GiB 启动预算。vLLM 退出码为 1；loopback 接收器仅收到 10 条初始化 span，`llm_request` 为 0。没有启动 Aider、没有真实 completion、`--auto-test` 未执行；未触碰或中断其他用户任务。服务与接收器均已停止，端口释放，包含固定 prompt、原始 trace、日志和虚拟环境在内的本次 `/tmp` 实验目录已清理。M4 仍未通过；本次没有产生产品代码或新的模型数据证据。下次须在准备完成后、紧邻 vLLM 启动前重新确认 GPU 和端口；若 GPU 被占用则停止，不得降低预算与其他任务争抢资源。
+
 ## 固定编码任务
 
 以 `985c1e2`（本次 M3 开发开始前的 InferScope 基线）为临时仓库基线。在临时 checkout 中预置本项目 `tests/test_runtime_trace_correlation.py` 作为接受测试，然后把以下任务原文交给 Aider：
@@ -37,6 +41,7 @@ M4 尚未通过。2026-09-26 在用户确认资源空闲后，按固定任务进
 
 - 临时仓库基于固定 commit；Aider 安装在独立 venv，不改共享的 vLLM venv。
 - 使用 `/tmp` 下唯一实验目录和事先确认未占用的 loopback 端口；OTel receiver 也只绑定 loopback。实验前再次只读检查 GPU、端口和服务状态。
+- 准备环境可能耗时；GPU/端口检查必须紧邻 vLLM 启动前执行。若检查后经历准备工作或等待，应重新检查；发现他人任务占用 GPU 或显存预算不足时立即停止，不接管、不终止、不与其争抢资源。
 - 仅在 GPU 可用且不会中断他人任务时启动独立 vLLM 0.29.0 服务；若 GPU 仍被占用，停止 M4 执行并保留本文件状态，不复用或接管其它服务。
 - Aider 使用 vLLM 暴露的 OpenAI-compatible endpoint。按官方 Aider 文档设置临时 `OPENAI_API_BASE` 和仅供本地 endpoint 的占位 `OPENAI_API_KEY`，模型名使用服务 `/v1/models` 返回的 ID 并加 `openai/` 前缀；具体参数以本机锁定的 Aider 版本 `--help` 核对。参考：[Aider OpenAI-compatible API](https://aider.chat/docs/llms/openai-compat.html)。
 - 使用一次固定 prompt 和一次任务运行；不通过改任务、换模型或多次重试挑选成功结果。无论成功或失败，都记录 Aider 退出状态和测试结果。
