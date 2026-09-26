@@ -55,7 +55,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 | M1 离线分析核心 | 已完成 | 直接构造和 JSONL 输入共用校验；Workload 与 vLLM OTel 十进制时间按纳秒精度稳定换算，并将纳秒结果限制为最多 4096 位以防极端指数造成无界分配；重复生命周期边界显式报告，歧义推导值保持 UNKNOWN；请求、Adapter、KV、Replay/Compare 报告标注实测/推导/模拟来源；Radix 淘汰会回收无效 trie 路径。Hash/Radix 容量与驱逐按前缀 block entry 计。全套测试 74 项及 3 个子用例在本地和远端 `agent-235` 环境通过。 |
 | M2 vLLM 真实 Trace 链路 | 已完成 | 在现有 vLLM 0.29.0 环境对既有 Llama-3-8B-Instruct 仅发送一条合成请求；采集到唯一 `llm_request`（聚合 OTLP 共 110 spans），将 request id、起止时间、14/8 token 和实际提供的五项 latency 与 Adapter/CLI 逐项核对。脱敏白名单 fixture：`tests/fixtures/vllm-0.29.0-otel.json`；`adapt`、`summary`、`inspect` 均成功；新增 fixture/CLI/UNKNOWN 回归及全套测试 78 项和 3 个子用例通过。未启用 detailed traces；KV、Prefix Cache、Scheduler 仍未由本次 trace 证明，按路线留待 M3。 |
 | M3 真实 Cache/Scheduler 观测 | 已完成（vLLM 0.29.0 可安全接入范围） | 原生 StatLogger 的逐请求缓存 token（含 request ID/回调采集时间）、engine 级 Scheduler/Prefix Cache 统计、可选 KV 淘汰样本均保留来源与 scope；`summary --runtime-stats` 支持多 engine 文件，按唯一 request ID 关联，缺失/重复/跨 engine 歧义保持 UNKNOWN。真实重复前缀实测首次 0/360、再次 352/360 cached tokens，PrefixCacheStats 720 queries/352 hits，20 条快照和 1 条淘汰样本在脱敏 fixture；全量 105 项及 3 个子用例通过。逐请求 Scheduler 与 block ID/完整生命周期不可得，明确不宣称覆盖；跨来源真实 ID 联表留给 M4 核验。 |
-| M4 Aider + vLLM 验收 | 未通过（Llama 任务未修改代码；Qwen 服务与 trace 成功，但 Aider 输出不符合编辑协议且超上下文预算，接受测试未运行） | 固定任务及隔离办法见 `docs/m4-aider-acceptance.md`。Llama 3 8B 的 8,192 context 不足；Qwen3.6-27B-GPTQ-Int4 在 vLLM 0.29.0、双卡、32,768 context 下成功 ready。Aider 0.86.2 产生 4 条 `llm_request` trace（另有 5 次 HTTP 200，二者数量差异待查），但持续输出解释/整文件草稿，Aider 将解释当文件名并由 flake8 捕获 SyntaxError；上下文估算升至 45,160，超过 28,672 元数据上限，遂由 Ctrl+C 停止。预置 `pytest -q` 未运行，不能判定任务效果；临时 Aider 输出未并入产品分支。当前规划原文实测哈希与历史记录哈希不一致，下一轮前须先厘清，并明确模型编辑格式/上下文预算的可复现配置；不得原样重跑或声称 M4 通过。完整测试基线 105 项及 3 个子用例通过，不能替代 M4。 |
+| M4 Aider + vLLM 验收 | 已通过（Qwen3.6-27B-GPTQ-Int4；同一配置两次独立运行均完成任务并通过测试） | 固定任务、配置与白名单证据见 `docs/m4-aider-acceptance.md`。Aider 0.86.2 显式使用原生 `diff` edit format、关闭 repo map，并将模型输入上限设为 28,672；同一预置基线两轮均产出代码修改，内置及独立全套测试均为 105 passed、3 个子测试通过。16 个 Agent HTTP 200 completion 全部与 `llm_request` span 按 ID 一一匹配；InferScope 两轮 `adapt → summary` 均完整保留 request ID、prompt/completion tokens 及五项已观测 latency，逐项差异为 0。此前 Llama/Qwen 失败记录保留为排障历史；Aider 结束时有非阻断 summarizer shutdown 告警。未据此宣称本轮观测到 Scheduler/Cache/KV 请求级数据。 |
 | M5 SGLang 实测 | 未开始 | 目前只有离线 Adapter。 |
 | M6 发布质量 | 未开始 | 按前序里程碑产出更新。 |
 
@@ -89,7 +89,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 
 **启动门槛：** M2 通过；数据与 request id 关联稳定；原始 trace 和分析报告已核对；M3 中未支持的字段会如实显示 `UNKNOWN`；Agent 运行环境可隔离并清理。
 
-**工作：** 使用现成 Aider，在临时仓库执行固定编码任务，经 vLLM 服务调用模型。记录任务是否通过测试，以及实际产生的请求、token 和延迟；分析结论回查原始 trace。Aider 的任务流程保持框架原样，不为 InferScope 改造成自定义 Agent。
+**工作：** 使用现成 Aider，在临时仓库执行固定编码任务，经 vLLM 服务调用模型。记录任务是否通过测试，以及实际产生的请求、token 和延迟；分析结论回查原始 trace。Aider 的任务流程保持框架原样，不为 InferScope 改造成自定义 Agent。当前固定任务的两次复现均已按 `docs/m4-aider-acceptance.md` 验收通过；后续若改模型、基线或编辑配置，须作为新实验记录，不能覆盖本次证据。
 
 **通过条件：** 实验可重复；任务结果、Agent 请求与 Runtime trace 能对应；报告只对有数据支持的延迟和缓存行为作结论。
 
