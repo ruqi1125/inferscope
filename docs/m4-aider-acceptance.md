@@ -25,9 +25,26 @@ M4 尚未通过。2026-09-26 在用户确认资源空闲后，按固定任务进
 
 同日对当前代码执行 `python -m pytest -q`：105 passed，3 subtests passed。另用随仓库保存的 vLLM 0.29.0 脱敏 OTel trace 与 native-stats JSONL 实际运行 `adapt → summary`：6 个事件形成 1 个请求，五项延迟均标为 `OBSERVED`；trace 请求与 native 统计属于不同采集轮次，关联报告为 0 matched、各自 unmatched，逐请求缓存值保持 `UNKNOWN`，engine 级 Scheduler/Prefix Cache/KV 淘汰仍单独报告。该检查验证的是已保存样本的 CLI 行为，不是新的 live inference 或 Aider 验收，不能代替 M4。
 
-应用户授权，2026-09-26 准备改用已有 `/home/nas511/zhangruqi/models/Qwen3.6-27B-GPTQ-Int4`，保持固定任务、预置接受测试和 prompt SHA-256 不变。模型目录已有权重及完整 tokenizer；`config.json` 为 `model_type=qwen3_5`、架构 `Qwen3_5ForConditionalGeneration`、上下文上限 262,144；现有 vLLM 0.29.0 安装包含该架构实现。本次没有下载模型权重或 tokenizer。独立 Aider 0.86.2/pytest 环境已在 `/tmp` 创建；在基线 `985c1e2abaffda333fdca2854231e3c793b87503` 预置的测试 blob 与记录一致，基线测试按预期因尚无 `inferscope.runtime.correlation` 而收集失败。
+应用户授权，2026-09-26 准备改用已有 `/home/nas511/zhangruqi/models/Qwen3.6-27B-GPTQ-Int4`，保持固定任务原文和预置接受测试。模型目录已有权重及完整 tokenizer；`config.json` 为 `model_type=qwen3_5`、架构 `Qwen3_5ForConditionalGeneration`、上下文上限 262,144；现有 vLLM 0.29.0 安装包含该架构实现。本次没有下载模型权重或 tokenizer。独立 Aider 0.86.2/pytest 环境已在 `/tmp` 创建；在基线 `985c1e2abaffda333fdca2854231e3c793b87503` 预置的测试 blob 与记录一致，基线测试按预期因尚无 `inferscope.runtime.correlation` 而收集失败。
 
 GPU 预检在 14:53 时两卡空闲；准备环境期间，另一项训练任务于 15:07 开始占用两卡。本次没有在服务启动前重新检查，15:11 启动 vLLM 时便因显存不足退出：CUDA 1 仅剩 8.66/23.56 GiB，低于 `--gpu-memory-utilization 0.85` 对应的 20.02 GiB 启动预算。vLLM 退出码为 1；loopback 接收器仅收到 10 条初始化 span，`llm_request` 为 0。没有启动 Aider、没有真实 completion、`--auto-test` 未执行；未触碰或中断其他用户任务。服务与接收器均已停止，端口释放，包含固定 prompt、原始 trace、日志和虚拟环境在内的本次 `/tmp` 实验目录已清理。M4 仍未通过；本次没有产生产品代码或新的模型数据证据。下次须在准备完成后、紧邻 vLLM 启动前重新确认 GPU 和端口；若 GPU 被占用则停止，不得降低预算与其他任务争抢资源。
+
+2026-09-26 用户确认资源空闲后再次实测同一固定任务，改用上述 Qwen。启动前 GPU 0/1 各空闲 24,124 MiB、无计算进程，18000/4317 均未占用；vLLM 0.29.0 以 `CUDA_VISIBLE_DEVICES=0,1`、`--tensor-parallel-size 2 --max-model-len 32768 --max-num-seqs 1 --gpu-memory-utilization 0.85` 启动，loopback OTel endpoint 为 `127.0.0.1:4317`。模型从 NAS 读取约 19.54 GiB 权重并完成初始化，KV cache 36,864 tokens，`/v1/models` 返回 `inferscope-m4-qwen35-27b-gptq`。Aider 0.86.2 使用隔离 venv、HF 镜像和本地占位 API key；运行时 PATH 临时优先使用已有 `/home/nas511/zhangruqi/agent-235/.venv/bin` 提供 pytest，执行原定 `--yes-always --no-check-update --no-auto-commits --auto-test --test-cmd 'pytest -q' --analytics-disable`；模型元数据上限为 28,672 输入、4,096 输出 tokens。
+
+本次从规划文件原文提取的任务 SHA-256 为 `b81ca419ba3ae9c0b86f69b662128573228da3f375a9c3b1b3e11c6c29149941`，本地与远端文件一致；历史 Llama 记录的 SHA-256 是 `4c0c121898b0bcfb4956f289f5316ec7a6bd59bc71d25028a973f6d04f6bbc17`。两者不一致，因此不能声称本次字节级 prompt 哈希与历史运行相同；本次没有改写规划文件中的任务原文，历史差异留待下一轮验收前厘清。
+
+vLLM access log 有 5 次 `/v1/chat/completions` HTTP 200，接收器实际保存 165 spans，其中有 4 条 `llm_request`。按脱敏白名单核对的真实请求为：
+
+| Request ID | Prompt/Completion tokens | TTFT/E2E（秒） |
+|---|---:|---:|
+| `chatcmpl-b72dbf16f868a770` | 7,661 / 1,537 | 6.152 / 29.822 |
+| `chatcmpl-b6315540d013393f` | 16,474 / 13,966 | 24.164 / 340.126 |
+| `chatcmpl-a905b357f5ca450f` | 20,538 / 10,500 | 26.238 / 220.016 |
+| `chatcmpl-bf7c04fce243ed77` | 15,998 / 1,726 | 19.278 / 62.651 |
+
+Aider 首先要求补入文件；`--yes-always` 自动选取文件后，Qwen 持续输出解释和整文件草稿，而不是 Aider 可识别的编辑格式。Aider 将解释片段误作文件名，在临时仓库生成伪文件并改写临时 `main.py`；自动 flake8 检查捕获 `SyntaxError`。随后上下文估算从 30,742 增至 45,160，超过配置的 28,672 输入上限，输出仍重复同类方案。为停止无效请求，本次 Aider 由 Ctrl+C 中断；wrapper 未保存退出码。Aider 没有形成有效产品实现，预置 `pytest -q` 未运行（只运行了自动 flake8 且失败）；基线接受测试仍仅有预期的缺失模块收集错误。Aider access log 与 OTel 分别记录 5 个成功 HTTP 请求和 4 条请求 span，数量差异也尚未解释。故这次证明模型服务和真实请求采集可以工作，但不证明 Agent 编码或 M4 验收通过。
+
+本次 vLLM 和 receiver 已对各自 PID 发送 SIGTERM 并正常退出；确认两端口释放、两卡恢复为各 24,124 MiB 空闲。提取必要脱敏字段后已清理本次唯一 `/tmp/inferscope-m4-qwen.2ZwphT` 实验目录，未保留 prompt 文件、模型回复、原始 trace、日志或密钥。下一步不是原样重跑：先厘清固定 prompt 哈希历史差异，并解决 Qwen 输出与 Aider 编辑协议不兼容及输入上下文超过元数据预算的问题；再明确一次新的、可复现的验收配置。临时仓库中的 Aider 输出不得并入产品分支。
 
 ## 固定编码任务
 
