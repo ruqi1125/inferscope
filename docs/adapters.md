@@ -10,7 +10,7 @@ inferscope summary trace.jsonl
 
 可用 `examples/demo-otel.json` 试跑 vLLM adapter。
 
-输入支持 OTLP JSON 中的 `resourceSpans[].scopeSpans[].spans[]`，也支持顶层 `spans` 数组。请求关联字段识别 `gen_ai.request.id`、`request_id` 和 `req_id`。Span 缺少 request id 或有效纳秒时间戳时会被跳过。
+输入支持 OTLP JSON 中的 `resourceSpans[].scopeSpans[].spans[]`，也支持顶层 `spans` 数组。请求关联字段识别 `gen_ai.request.id`、`request_id` 和 `req_id`。SGLang 子 span 若没有直接 request ID，仅当其 `traceId` 唯一对应一个带 request ID 的根 span 时才继承关联；没有唯一根 span 时保留为未关联数据，不猜测归属。仍无法关联或缺少有效纳秒时间戳的 span 会被跳过。
 
 ## vLLM
 
@@ -58,7 +58,21 @@ inferscope inspect "$TMP_DIR/trace.jsonl" "$REQUEST_ID" --json
 
 ## SGLang
 
-SGLang 可用 `--enable-trace --otlp-traces-endpoint ...` 导出请求 trace。Adapter 将根 span 映射为请求到达/完成，并识别已观测到的 `prefill_waiting`、`prefill_forward`、`chunked_prefill` 和 `decode_forward` 阶段。其它 stage 以 `FRAMEWORK_SPAN` 保留，不会丢弃，也不会被猜测性地归入 prefill/decode。
+已对 SGLang 0.5.20 做真实 OTel smoke test：既有 Llama-3-8B-Instruct 服务通过 loopback OTLP 收到一条合成请求的 trace。白名单脱敏样本保存在 `tests/fixtures/sglang-0.5.20-otel.json`，对应的 Adapter、分析器和 CLI 回归测试为 `tests/test_sglang_live_fixture.py`。
+
+实测根 span 带 `gen_ai.request.id`，同一 `traceId` 下的 `tokenize`、`request_process`、`prefill_waiting`、`prefill_forward`、`decode_forward`、Scheduler 等子 span 没有 request ID。Adapter 现在只在该 trace 唯一对应一个请求根 span 时关联这些子 span，并把 `request_id_source=TRACE_ID_ASSOCIATION` 写入统一事件；span 自带 ID 时优先使用直接属性。trace 中有多个候选请求根时不关联子 span，避免错配。
+
+Adapter 映射根 span 提供的 Queue、Prefill、Decode、TTFT、E2E latency 秒值为纳秒制 `OBSERVED` 指标，并映射其直接提供的 `gen_ai.usage.cached_tokens`。`prefill_waiting` 的起止时间用于 queued/scheduled 边界；若没有根 span Queue 指标，Queue 从该边界推导，而不把入口和 tokenize 时间计入等待。已识别 `prefill_forward`、`chunked_prefill` 和 `decode_forward`；其它 stage 继续以 `FRAMEWORK_SPAN` 保留，不猜测阶段含义。缺少的 latency/cache 数据仍显示 `UNKNOWN`。
+
+可对保存的样本端到端复核：
+
+```bash
+python -m inferscope adapt sglang tests/fixtures/sglang-0.5.20-otel.json --output /tmp/sglang-trace.jsonl
+python -m inferscope summary /tmp/sglang-trace.jsonl --json
+python -m inferscope inspect /tmp/sglang-trace.jsonl req-sglang-001 --json
+```
+
+此 smoke test 证明的是单条合成请求的 trace/Adapter/CLI 字段映射，不等同于 Aider 端到端验收，也不证明 SGLang 提供完整的 Prefix Cache、KV block 生命周期或逐请求 Scheduler 行为；这些缺口仍按 `UNKNOWN` 处理。完整的 SGLang+Aider 对照验收仍在进行。
 
 ## 已知限制
 

@@ -57,6 +57,48 @@ class RequestAnalyzerTests(unittest.TestCase):
         self.assertIsNone(summary.decode_ns)
         self.assertIsNone(summary.ttft_ns)
 
+    def test_queue_uses_queued_boundary_and_duplicate_queue_stays_unknown(self):
+        summary = summarize_requests([
+            Event(10, "REQUEST_ARRIVED", "r"),
+            Event(20, "REQUEST_QUEUED", "r"),
+            Event(30, "REQUEST_SCHEDULED", "r"),
+            Event(40, "REQUEST_FINISHED", "r"),
+        ])[0]
+
+        self.assertEqual(summary.queue_ns, 10)
+        self.assertEqual(summary.latency_sources["queue_ns"], "DERIVED")
+
+        ambiguous = summarize_requests([
+            Event(10, "REQUEST_ARRIVED", "r"),
+            Event(20, "REQUEST_QUEUED", "r"),
+            Event(21, "REQUEST_QUEUED", "r"),
+            Event(30, "REQUEST_SCHEDULED", "r"),
+        ])[0]
+        self.assertIsNone(ambiguous.queue_ns)
+        self.assertEqual(ambiguous.latency_sources["queue_ns"], "UNKNOWN")
+        self.assertEqual(ambiguous.ambiguous_event_types, ("REQUEST_QUEUED",))
+
+    def test_cached_tokens_keep_evidence_and_reject_impossible_values(self):
+        observed_zero = summarize_requests([
+            Event(1, "REQUEST_ARRIVED", "zero", {"input_tokens": 10}),
+            Event(2, "REQUEST_FINISHED", "zero", {
+                "cached_tokens": 0,
+                "cached_tokens_source": "OBSERVED",
+            }),
+        ])[0]
+        self.assertEqual(observed_zero.cached_tokens, 0)
+        self.assertEqual(observed_zero.cached_tokens_source, "OBSERVED")
+
+        impossible = summarize_requests([
+            Event(1, "REQUEST_ARRIVED", "bad", {"input_tokens": 10}),
+            Event(2, "REQUEST_FINISHED", "bad", {
+                "cached_tokens": 11,
+                "cached_tokens_source": "OBSERVED",
+            }),
+        ])[0]
+        self.assertIsNone(impossible.cached_tokens)
+        self.assertEqual(impossible.cached_tokens_source, "UNKNOWN")
+
 
 if __name__ == "__main__":
     unittest.main()

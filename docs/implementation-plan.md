@@ -73,7 +73,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 | M2 vLLM 真实 Trace 链路 | 已完成 | 在现有 vLLM 0.29.0 环境对既有 Llama-3-8B-Instruct 仅发送一条合成请求；采集到唯一 `llm_request`（聚合 OTLP 共 110 spans），将 request id、起止时间、14/8 token 和实际提供的五项 latency 与 Adapter/CLI 逐项核对。脱敏白名单 fixture：`tests/fixtures/vllm-0.29.0-otel.json`；`adapt`、`summary`、`inspect` 均成功；新增 fixture/CLI/UNKNOWN 回归及全套测试 78 项和 3 个子用例通过。未启用 detailed traces；KV、Prefix Cache、Scheduler 仍未由本次 trace 证明，按路线留待 M3。 |
 | M3 真实 Cache/Scheduler 观测 | 已完成（vLLM 0.29.0 可安全接入范围） | 原生 StatLogger 的逐请求缓存 token（含 request ID/回调采集时间）、engine 级 Scheduler/Prefix Cache 统计、可选 KV 淘汰样本均保留来源与 scope；`summary --runtime-stats` 支持多 engine 文件，按唯一 request ID 关联，缺失/重复/跨 engine 歧义保持 UNKNOWN。真实重复前缀实测首次 0/360、再次 352/360 cached tokens，PrefixCacheStats 720 queries/352 hits，20 条快照和 1 条淘汰样本在脱敏 fixture；全量 105 项及 3 个子用例通过。逐请求 Scheduler 与 block ID/完整生命周期不可得，明确不宣称覆盖；跨来源真实 ID 联表留给 M4 核验。 |
 | M4 Aider + vLLM 验收 | 已通过（Qwen3.6-27B-GPTQ-Int4；同一配置两次独立运行均完成任务并通过测试） | 固定任务、配置与白名单证据见 `docs/m4-aider-acceptance.md`。Aider 0.86.2 显式使用原生 `diff` edit format、关闭 repo map，并将模型输入上限设为 28,672；同一预置基线两轮均产出代码修改，内置及独立全套测试均为 105 passed、3 个子测试通过。16 个 Agent HTTP 200 completion 全部与 `llm_request` span 按 ID 一一匹配；InferScope 两轮 `adapt → summary` 均完整保留 request ID、prompt/completion tokens 及五项已观测 latency，逐项差异为 0。此前 Llama/Qwen 失败记录保留为排障历史；Aider 结束时有非阻断 summarizer shutdown 告警。未据此宣称本轮观测到 Scheduler/Cache/KV 请求级数据。 |
-| M5 SGLang 实测 | 未开始 | 目前只有离线 Adapter。 |
+| M5 SGLang 实测 | 进行中 | 2026-09-26 在 SGLang 0.5.20 上完成一条真实合成请求的 OTLP capture；脱敏 fixture、traceId 唯一根关联、延迟/cache 映射及 CLI 回归已实现并验证。Aider 同类任务与 SGLang 真实请求逐项对账尚待完成。 |
 | M6 发布质量 | 未开始 | 按前序里程碑产出更新。 |
 
 ## 4. 唯一实施顺序

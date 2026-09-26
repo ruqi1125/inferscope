@@ -106,6 +106,15 @@ def _format_summary(data: dict[str, Any], as_json: bool) -> None:
         print(f"{label:<22}{shown}")
         sources = data["latency_source_counts"][phase]
         print(f"  来源：输入实测 {sources['OBSERVED']}，边界推导 {sources['DERIVED']}，未知 {sources['UNKNOWN']}")
+    cache_rows = [row for row in data["requests_detail"] if row["cached_tokens"] is not None]
+    if cache_rows:
+        print("请求级缓存 tokens")
+        for row in cache_rows:
+            input_tokens = "UNKNOWN" if row["input_tokens"] is None else row["input_tokens"]
+            print(
+                f"  {row['request_id']:<24} cached={row['cached_tokens']}/{input_tokens} "
+                f"来源={row['cached_tokens_source']}"
+            )
     if data["kv_cache"] is not None:
         kv = data["kv_cache"]
         utilization = f"{kv['utilization']:.1%}" if kv["utilization"] is not None else "UNKNOWN（未提供容量）"

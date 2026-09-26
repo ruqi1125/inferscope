@@ -1,0 +1,94 @@
+{
+  "spans": [
+    {
+      "name": "tokenize",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1000000000",
+      "endTimeUnixNano": "1004703488",
+      "attributes": []
+    },
+    {
+      "name": "api_server_dispatch",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1004760832",
+      "endTimeUnixNano": "1005204224",
+      "attributes": []
+    },
+    {
+      "name": "Tokenizer",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1000000000",
+      "endTimeUnixNano": "1005204224",
+      "attributes": []
+    },
+    {
+      "name": "Req req-sglang-001",
+      "traceId": "trace-sglang-001",
+      "startTimeUnixNano": "1000000000",
+      "endTimeUnixNano": "1191748096",
+      "attributes": [
+        {"key": "gen_ai.usage.completion_tokens", "value": {"intValue": "8"}},
+        {"key": "gen_ai.usage.prompt_tokens", "value": {"intValue": "14"}},
+        {"key": "gen_ai.usage.cached_tokens", "value": {"intValue": "1"}},
+        {"key": "gen_ai.request.id", "value": {"stringValue": "req-sglang-001"}},
+        {"key": "gen_ai.request.max_tokens", "value": {"intValue": "8"}},
+        {"key": "gen_ai.latency.time_to_first_token", "value": {"doubleValue": 0.19170415302505717}},
+        {"key": "gen_ai.latency.e2e", "value": {"doubleValue": 0.19174834800651297}},
+        {"key": "gen_ai.latency.time_in_model_decode", "value": {"doubleValue": 0.00004419498145580292}},
+        {"key": "gen_ai.latency.time_in_model_inference", "value": {"doubleValue": 0.18654415901983157}},
+        {"key": "gen_ai.latency.time_in_model_prefill", "value": {"doubleValue": 0.18649996403837577}}
+      ]
+    },
+    {
+      "name": "request_process",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1005908992",
+      "endTimeUnixNano": "1005957120",
+      "attributes": []
+    },
+    {
+      "name": "prefill_waiting",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1005957120",
+      "endTimeUnixNano": "1027962112",
+      "attributes": []
+    },
+    {
+      "name": "prefill_forward",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1027962112",
+      "endTimeUnixNano": "1053393408",
+      "attributes": []
+    },
+    {
+      "name": "decode_loop",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1054686720",
+      "endTimeUnixNano": "1072858368",
+      "attributes": []
+    },
+    {
+      "name": "decode_forward",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1053393408",
+      "endTimeUnixNano": "1190042357",
+      "attributes": []
+    },
+    {
+      "name": "Scheduler [TP 0] [PP 0]",
+      "traceId": "trace-sglang-001",
+      "parentSpanId": "parent-redacted",
+      "startTimeUnixNano": "1005798776",
+      "endTimeUnixNano": "1190042357",
+      "attributes": []
+    }
+  ]
+}

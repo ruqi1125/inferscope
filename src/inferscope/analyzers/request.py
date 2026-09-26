@@ -24,6 +24,8 @@ class RequestSummary:
     e2e_ns: int | None
     input_tokens: int | None
     output_tokens: int | None
+    cached_tokens: int | None
+    cached_tokens_source: str
     latency_sources: dict[str, str] = field(default_factory=dict)
     ambiguous_event_types: tuple[str, ...] = ()
 
@@ -44,7 +46,7 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
         for event in rows:
             grouped_events[event.event_type].append(event)
 
-        tracked_events = {"REQUEST_ARRIVED", "REQUEST_SCHEDULED", "PREFIX_LOOKUP", "PREFILL_STARTED", "PREFILL_FINISHED", "REQUEST_FINISHED"}
+        tracked_events = {"REQUEST_ARRIVED", "REQUEST_QUEUED", "REQUEST_SCHEDULED", "PREFIX_LOOKUP", "PREFILL_STARTED", "PREFILL_FINISHED", "REQUEST_FINISHED"}
         ambiguous_event_types = tuple(sorted(
             event_type for event_type, matching in grouped_events.items()
             if event_type in tracked_events and len(matching) > 1
@@ -59,6 +61,7 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
             return event.timestamp_ns if event else None
 
         arrived = stamp("REQUEST_ARRIVED")
+        queued = stamp("REQUEST_QUEUED")
         scheduled = stamp("REQUEST_SCHEDULED")
         prefill_start = stamp("PREFILL_STARTED")
         prefill_end = stamp("PREFILL_FINISHED")
@@ -75,7 +78,8 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
 
         queue_ns = measured_duration("queue_ns")
         if queue_ns is None:
-            queue_ns = scheduled - arrived if arrived is not None and scheduled is not None and scheduled >= arrived else None
+            queue_start = queued if "REQUEST_QUEUED" in grouped_events else arrived
+            queue_ns = scheduled - queue_start if queue_start is not None and scheduled is not None and scheduled >= queue_start else None
         prefill_ns = measured_duration("prefill_ns")
         if prefill_ns is None:
             prefill_ns = prefill_end - prefill_start if prefill_start is not None and prefill_end is not None and prefill_end >= prefill_start else None
@@ -94,6 +98,28 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
         if input_tokens is None and arrived_event is not None:
             input_tokens = arrived_event.attributes.get("input_tokens")
         output_tokens = finished_event.attributes.get("output_tokens") if finished_event else None
+        cached_value = finished_event.attributes.get("cached_tokens") if finished_event else None
+        input_token_count = (
+            input_tokens
+            if isinstance(input_tokens, int) and not isinstance(input_tokens, bool) and input_tokens >= 0
+            else None
+        )
+        cached_tokens = (
+            cached_value
+            if isinstance(cached_value, int)
+            and not isinstance(cached_value, bool)
+            and cached_value >= 0
+            and (input_token_count is None or cached_value <= input_token_count)
+            else None
+        )
+        cache_source = finished_event.attributes.get("cached_tokens_source") if finished_event else None
+        cached_tokens_source = (
+            cache_source
+            if cached_tokens is not None
+            and isinstance(cache_source, str)
+            and cache_source in {"OBSERVED", "DERIVED", "SIMULATED"}
+            else "UNKNOWN"
+        )
         durations = dict(queue_ns=queue_ns, prefill_ns=prefill_ns, decode_ns=decode_ns,
                          ttft_ns=ttft_ns, e2e_ns=e2e_ns)
         latency_sources = {
@@ -115,6 +141,8 @@ def summarize_requests(events: list[Event]) -> list[RequestSummary]:
             e2e_ns=e2e_ns,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cached_tokens=cached_tokens,
+            cached_tokens_source=cached_tokens_source,
             latency_sources=latency_sources,
             ambiguous_event_types=ambiguous_event_types,
         ))

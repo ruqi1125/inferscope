@@ -71,9 +71,15 @@ class TraceAdapter(ABC):
     def to_events(self, document: Mapping[str, Any]) -> list[Event]:
         """将框架的 OTel 导出 JSON 映射为 InferScope 事件。"""
 
-    def _span(self, raw: Mapping[str, Any]) -> tuple[str, int, int, dict[str, Any], bool] | None:
+    def _span(
+        self,
+        raw: Mapping[str, Any],
+        fallback_request_id: str | None = None,
+    ) -> tuple[str, int, int, dict[str, Any], bool] | None:
         attrs = _attributes(raw.get("attributes", {}))
         request_id = attrs.get("gen_ai.request.id", attrs.get("request_id", attrs.get("req_id")))
+        if request_id is None or not str(request_id).strip():
+            request_id = fallback_request_id
         if request_id is None:
             return None
         try:
