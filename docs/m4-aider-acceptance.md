@@ -8,7 +8,20 @@ M4 尚未通过。2026-09-26 在用户确认资源空闲后，按固定任务进
 
 固定编码任务以基线 `985c1e2abaffda333fdca2854231e3c793b87503` 临时检出；接受测试来自 `7ade70e`（blob `6e1c7dc64118b5b358060baca8c8339766246a8d`），预置提交为 `dbccdd8776e12cf87303d00325f1ced06ddda7b5`（`预置 M4 接受测试`）。vLLM 启动命令参数为 `--host 127.0.0.1 --port 18000 --served-model-name inferscope-m4-llama-3-8b --max-model-len 4096 --max-num-seqs 1 --gpu-memory-utilization 0.85 --otlp-traces-endpoint grpc://127.0.0.1:4317`，并设置 `CUDA_VISIBLE_DEVICES=0`、`OTEL_EXPORTER_OTLP_TRACES_INSECURE=true`。Aider 在独立 venv 安装时从 0.86.0 自更新到 0.86.2；固定 prompt 的 SHA-256 为 `4c0c121898b0bcfb4956f289f5316ec7a6bd59bc71d25028a973f6d04f6bbc17`（prompt 不留存）。唯一一次实际任务使用 `--model openai/inferscope-m4-llama-3-8b --message-file <固定任务文件> --yes-always --no-check-update --no-auto-commits --auto-test --test-cmd 'pytest -q' --analytics-disable`。Aider 能访问 `/v1/models` 并完成仓库映射，但随后进程持续尝试连接 `huggingface.co:443`，该 HTTPS 连接超时；约 8 分钟仍未发出模型 completion 请求，按固定失败规则终止，退出码 143。vLLM 日志中 `/v1/chat/completions` 请求数为 0；OTLP 接收器收到 45 条 vLLM 启动/加载 span，但 `llm_request` 数为 0。因此 Aider 没有产出修改，`--auto-test` 未执行，不能评价任务效果或跨来源请求关联。另在基线临时仓库执行接受测试命令 `pytest -q`，收集阶段因待实现的 `inferscope.runtime.correlation` 模块缺失而报错；这是预期的任务缺口，不是 Aider 结果。
 
-实验日志、固定 prompt 和临时仓库/环境均位于 `/tmp/inferscope-m4.SAuGmB`，收尾时停止本次启动的服务并清理该目录；未保存 prompt、模型回复、原始 trace 或密钥。Aider 到 Hugging Face 的出站连通性是本次已证实的环境阻塞。没有更换任务、模型或工作流，也没有据此修改产品代码。故 M4 保持未通过；重新执行前须解决 tokenizer/模型元数据的可达性，并按同一固定验收重新安排单次运行。
+随后按用户建议验证 HF 镜像。远端直连 `huggingface.co` 超时，`https://hf-mirror.com` 返回 HTTP 200；设置 `HF_ENDPOINT=https://hf-mirror.com` 后，HF Hub API 查询成功。Aider 在隔离的临时 HF 缓存中取回 `Xenova/llama-3-tokenizer`（9,084,490 字节）；既有 Llama 模型目录本来就有完整权重和 tokenizer，因此没有下载权重，也没有改动模型目录。镜像解决了初始化联网阻塞。
+
+镜像后的任务仍未完成。Aider 0.86.2 使用同一固定 prompt（SHA-256 不变）、基线 `985c1e2abaffda333fdca2854231e3c793b87503`、接受测试 blob `6e1c7dc64118b5b358060baca8c8339766246a8d` 和模型 ID `inferscope-m4-llama-3-8b`；本次临时接受测试预置提交为 `8d6c2de5091165df613e4174d4792191a50f14c3`。`--yes-always` 按 Aider 原生流程自动采纳模型建议并把相关源文件加入上下文。vLLM 先按 `--max-model-len 4096` 运行：两次诊断运行分别出现一次 200 completion 后跟随一次 400；Aider 报告输入约 6,379/0、6,095/3,072。随后核对既有 `config.json` 的 `max_position_embeddings=8192`，将最终验收尝试的唯一 Serving 参数调整为 `--max-model-len 8192`（其余参数不变），Aider 元数据设为 7,168 输入/1,024 输出。最终 Aider 命令仍为固定模型与固定任务，并使用 `--model-metadata-file <临时元数据文件> --yes-always --no-check-update --no-auto-commits --auto-test --test-cmd 'pytest -q' --analytics-disable`；进程环境设置 `OPENAI_API_BASE=http://127.0.0.1:18000/v1`、本地占位 `OPENAI_API_KEY`、`HF_ENDPOINT=https://hf-mirror.com` 和隔离 `HF_HOME`。Aider 前两次 completion 成功，但自动加入文件后估算输入 8,823/7,168，继续发送后被 vLLM 400 拒绝。Aider 退出码为 0，但临时仓库只有 Aider 自动生成的 `.gitignore` 变化，没有产品文件修改；`--auto-test --test-cmd 'pytest -q'` 未触发。故任务效果和测试结果仍不能判为通过。该证据将问题从 HF 网络定位为：固定 Llama 3 8B 的 8,192 上下文不足以容纳 Aider 此次原生文件发现与编辑上下文。
+
+临时 trace 中实际成功的四条 `llm_request` 白名单字段如下；三次被 vLLM 拒绝的 HTTP 400 不生成成功请求 span：
+
+| Serving max len | Request ID | Prompt/Completion tokens | TTFT/E2E（秒） |
+|---:|---|---:|---:|
+| 4096 | `chatcmpl-a2c898226a5579c3` | 2059 / 71 | 0.781 / 2.183 |
+| 4096 | `chatcmpl-861c70e39670319d` | 2008 / 88 | 0.301 / 2.045 |
+| 8192 | `chatcmpl-885eadd76f214cd3` | 2877 / 104 | 0.785 / 2.894 |
+| 8192 | `chatcmpl-87381f3ddf4a39d0` | 5613 / 95 | 1.238 / 3.210 |
+
+所有接收器、vLLM/Aider 进程、临时 HF 缓存、固定 prompt、原始 trace 和实验仓库均已清理；GPU/端口已释放，未保留模型回复或密钥。M4 仍未通过。继续前需决定如何在保持模型与任务不变时压缩 Aider 原生上下文（如调整其内置 repo-map/编辑上下文参数）；当前无证据支持修改 InferScope 产品代码。
 
 同日对当前代码执行 `python -m pytest -q`：105 passed，3 subtests passed。另用随仓库保存的 vLLM 0.29.0 脱敏 OTel trace 与 native-stats JSONL 实际运行 `adapt → summary`：6 个事件形成 1 个请求，五项延迟均标为 `OBSERVED`；trace 请求与 native 统计属于不同采集轮次，关联报告为 0 matched、各自 unmatched，逐请求缓存值保持 `UNKNOWN`，engine 级 Scheduler/Prefix Cache/KV 淘汰仍单独报告。该检查验证的是已保存样本的 CLI 行为，不是新的 live inference 或 Aider 验收，不能代替 M4。
 
