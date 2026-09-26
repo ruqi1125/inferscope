@@ -18,6 +18,23 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 
 项目最终通过真实 Serving Runtime 的可观测数据分析线上行为，同时保留一个边界清楚的离线模拟模式，用于理解 workload 与缓存策略。二者不得混为一谈。
 
+### 1.1 原始需求附件覆盖与最终验收
+
+本节将最初的 InferScope 需求附件固定为最终产品范围的追溯基准。下表中的“当前证据/缺口”描述已实现和已验证到什么程度，不代表最终范围；后续进度只能据证据更新，不能把当前不可观测或 `UNKNOWN` 静默改成永久不做。
+
+| 附件能力 | 最终验收标准 | 当前证据与缺口（按本规划基线） |
+|---|---|---|
+| Request Trace 与延迟 | 对支持的 Runtime/版本，将可获得的请求事件按 request ID 重建从进入、排队、调度、Prefix 查询、KV 分配、Prefill、Decode 到完成的时间线；报告 Queue、Prefill、Decode、TTFT、E2E 等有证据的延迟，并保留来源。 | vLLM trace 已核对 request ID、token 数及五项已提供 latency；当前真实数据尚不能重建完整逐请求调度、Prefix 与 KV 阶段。缺少事件的阶段必须标 `UNKNOWN`。 |
+| Prefix Cache Inspector | 有来源地报告 queried、matched/reused、recomputed tokens 和 hit ratio；miss 原因可分类为 `COLD_MISS`、`PREFIX_DIVERGENCE`、`BLOCK_ALIGNMENT`、`EVICTED`、`CAPACITY_PRESSURE` 或 `UNKNOWN`。原因归类须可追溯且不得由聚合指标臆断。 | vLLM 重复前缀实测获得逐请求 cached tokens 与服务级 Prefix 统计；尚未证明完整逐请求查询/匹配数据及可靠 miss 原因归因。 |
+| KV Cache Inspector | 在支持的数据源上重建带 block/request 关联的 `ALLOCATE`、`REUSE`、`FREE`、`EVICT` 变化，计算 allocated/reused/evicted blocks、peak usage、utilization，并提供可检查的 Cache Timeline；说明计数和容量口径。 | 当前 vLLM 只取得有限淘汰样本，缺少 block ID 与完整逐请求生命周期；故完整 Timeline、利用率及请求归因仍是缺口。 |
+| Scheduler 分析 | 消费统一事件中的逐请求调度行为（至少覆盖可观测的 queued/scheduled 及相关批次/调度事件），分析等待和调度行为；数据源不提供的事件显式标未知。 | 当前只有 engine/service 级 Scheduler 统计，没有逐请求 queued/scheduled 事件，不能据此推断单请求行为。 |
+| Workload 与 lost-reuse 分析 | 分析请求/输入 token 总量、potential 与 actual reuse/hit ratio、computed/cached tokens；在证据充分时按 eviction、prefix divergence、block alignment 等解释 lost reuse，否则将相应部分列为 `UNKNOWN`。 | 离线 workload 与缓存模拟可分析策略下的复用；基于真实 Runtime 事件的完整 potential/actual 对照及 lost-reuse 因果归因尚未完成。 |
+| Replay、模拟器与策略比较 | 从 workload JSONL（含 request ID、时间戳、input token IDs、output token 数）确定性回放；提供 HashBlock 与 Radix 两类模拟，覆盖 block/hash/alignment/eviction 以及 longest-prefix、sharing、reference count、LRU/eviction；同一 workload 可比较策略并报告口径。模拟结果必须明确标为模拟，不宣称等同真实 Runtime。 | HashBlock、Radix、Replay 和 Compare 已实现并有自动化测试；后续持续以原始需求中的行为和报告口径作为验收基准。 |
+| 统一事件模型与 Adapter | Core、cache、analyzer 不依赖 Serving Framework；Runtime 差异由 Adapter 隔离，统一事件保留时间、request/engine/batch/block 关联（源数据提供时）、scope、来源和证据；按既定 vLLM → SGLang 顺序验证。 | 统一事件模型及 vLLM/SGLang 离线 OTel Adapter 已有；vLLM 真实采集仍有上述事件缺口，SGLang 真实端到端尚未开始。 |
+| CLI、报告与最终流程 | CLI 至少支持 `summary`、`inspect`、`trace`、`replay`、`compare`；对真实采集和离线模拟给出可读且可追溯的报告，适合的命令提供机器可读 JSON。可选静态报告/TUI，不以复杂 Web 为目标。最终流程既可从真实 Runtime Adapter 分析，也可从 workload 回放、分析并比较策略。 | 主要 CLI 与离线流程已存在；vLLM+Aider 两轮真实请求/延迟核验通过；Cache/Scheduler 完整实测及 SGLang 流程仍待完成。 |
+
+**范围解释：** `UNKNOWN` 是某次数据或当前 Adapter/Runtime 版本尚无充分证据时的正确结果，不等于删除附件要求。对每个缺口，后续应先检查 Runtime 原生接口，再评估最小、可隔离、可选且按版本维护的采集方案。若确需侵入式 Runtime 修改，先列出具体字段、方案、风险和替代路径，取得用户明确批准后再实施；在批准前保持现状并如实标未知，不得宣称该能力已验收，也不得悄悄缩减最终目标。附件给出的仓库树是实现参考，不要求逐路径照搬；第 2 节的产品边界仍然有效。
+
 ## 2. 固定决策与边界
 
 1. **Runtime Inspector 是产品主线。** InferScope 不构建 Agent，不定义 Agent 工作流，也不把 Agent 评测平台作为产品目标。
@@ -83,7 +100,7 @@ InferScope 是轻量级的 LLM Serving Runtime Inspector，帮助开发者基于
 
 **工作：** 基于目标 vLLM 版本实际提供的事件/接口，接入有证据支持的 Prefix Cache、KV 生命周期和 Scheduler 数据，并将其映射到统一事件模型。优先使用 Runtime 已提供的可观测数据；如原生数据不足，先报告具体缺口及影响，再提出最小、可隔离的可选采集方案。
 
-**通过条件：** 报告能区分逐请求观测、服务级聚合值、模拟值和未知值；Cache/Scheduler 分析保留原生来源、scope、request/engine ID 及采集时间，可回查原始 JSONL。若必须大范围改 Runtime 内部实现才能取得逐请求 Scheduler 或完整 block 生命周期，记录为不支持并保持 UNKNOWN；未经用户明确批准不改 Runtime 内部，不把不可观测字段写成已完成。
+**通过条件：** 报告能区分逐请求观测、服务级聚合值、模拟值和未知值；Cache/Scheduler 分析保留原生来源、scope、request/engine ID 及采集时间，可回查原始 JSONL。原生接口不足时，须按 1.1 节记录缺口并评估最小、可隔离的可选采集路径；在任何获批方案实现并验证前，相关字段保持 UNKNOWN，不能据此把附件中的最终能力从范围中移除。未经用户明确批准不改 Runtime 内部实现，不把不可观测字段写成已完成。
 
 ### M4：Aider + vLLM 真实验收
 
