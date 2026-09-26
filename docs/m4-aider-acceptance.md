@@ -4,7 +4,11 @@
 
 ## 当前状态
 
-M4 尚未执行。2026-09-26 再次只读检查 `100.120.119.84`：GPU 0 空闲约 7.0 GiB、GPU 1 空闲约 8.9 GiB，GPU 1 利用率 97%；固定候选 Llama-3-8B-Instruct 无法按既定配置安全启动。OTLP/vLLM 实验端口未占用；系统 PATH 和已检查的用户目录深度内未找到 Aider，`agent-235/.venv` 中有 vLLM 但没有 Aider。远端仓库仍为 `4857b5a` 且工作区干净。没有停止或复用其他进程，也没有安装 Aider/启动服务。
+M4 尚未通过。2026-09-26 在用户确认资源空闲后，按固定任务进行了单次实测：选用专用 `/home/nas511/zhangruqi/.venv-vllm29`（vLLM 0.29.0）、既有 Llama-3-8B-Instruct、GPU 0、loopback 端口 18000/4317；启动时将该 venv 的 `bin` 加入 PATH，并按仓库 CUDA 12.0 兼容说明设置 `VLLM_USE_FLASHINFER_SAMPLER=0`。服务成功加载模型，GPU 在结束后恢复空闲。
+
+固定编码任务以基线 `985c1e2abaffda333fdca2854231e3c793b87503` 临时检出；接受测试来自 `7ade70e`（blob `6e1c7dc64118b5b358060baca8c8339766246a8d`），预置提交为 `dbccdd8776e12cf87303d00325f1ced06ddda7b5`（`预置 M4 接受测试`）。vLLM 启动命令参数为 `--host 127.0.0.1 --port 18000 --served-model-name inferscope-m4-llama-3-8b --max-model-len 4096 --max-num-seqs 1 --gpu-memory-utilization 0.85 --otlp-traces-endpoint grpc://127.0.0.1:4317`，并设置 `CUDA_VISIBLE_DEVICES=0`、`OTEL_EXPORTER_OTLP_TRACES_INSECURE=true`。Aider 在独立 venv 安装时从 0.86.0 自更新到 0.86.2；固定 prompt 的 SHA-256 为 `4c0c121898b0bcfb4956f289f5316ec7a6bd59bc71d25028a973f6d04f6bbc17`（prompt 不留存）。唯一一次实际任务使用 `--model openai/inferscope-m4-llama-3-8b --message-file <固定任务文件> --yes-always --no-check-update --no-auto-commits --auto-test --test-cmd 'pytest -q' --analytics-disable`。Aider 能访问 `/v1/models` 并完成仓库映射，但随后进程持续尝试连接 `huggingface.co:443`，该 HTTPS 连接超时；约 8 分钟仍未发出模型 completion 请求，按固定失败规则终止，退出码 143。vLLM 日志中 `/v1/chat/completions` 请求数为 0；OTLP 接收器收到 45 条 vLLM 启动/加载 span，但 `llm_request` 数为 0。因此 Aider 没有产出修改，`--auto-test` 未执行，不能评价任务效果或跨来源请求关联。另在基线临时仓库执行接受测试命令 `pytest -q`，收集阶段因待实现的 `inferscope.runtime.correlation` 模块缺失而报错；这是预期的任务缺口，不是 Aider 结果。
+
+实验日志、固定 prompt 和临时仓库/环境均位于 `/tmp/inferscope-m4.SAuGmB`，收尾时停止本次启动的服务并清理该目录；未保存 prompt、模型回复、原始 trace 或密钥。Aider 到 Hugging Face 的出站连通性是本次已证实的环境阻塞。没有更换任务、模型或工作流，也没有据此修改产品代码。故 M4 保持未通过；重新执行前须解决 tokenizer/模型元数据的可达性，并按同一固定验收重新安排单次运行。
 
 同日对当前代码执行 `python -m pytest -q`：105 passed，3 subtests passed。另用随仓库保存的 vLLM 0.29.0 脱敏 OTel trace 与 native-stats JSONL 实际运行 `adapt → summary`：6 个事件形成 1 个请求，五项延迟均标为 `OBSERVED`；trace 请求与 native 统计属于不同采集轮次，关联报告为 0 matched、各自 unmatched，逐请求缓存值保持 `UNKNOWN`，engine 级 Scheduler/Prefix Cache/KV 淘汰仍单独报告。该检查验证的是已保存样本的 CLI 行为，不是新的 live inference 或 Aider 验收，不能代替 M4。
 
